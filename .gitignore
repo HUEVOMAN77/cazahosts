@@ -1,0 +1,23 @@
+# Build
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+
+# Android
+*.apk
+*.aab
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Firma (nunca subir la llave)
+*.jks
+*.keystore
+upload-keystore.jks
+
+# Sistema
+.DS_Store
+Thumbs.db
