@@ -285,8 +285,11 @@ object VulnDb {
         }
 
         for (rule in rules) {
-            if (rule.ports.isNotEmpty() && port.port !in rule.ports) continue
-            if (rule.services.isNotEmpty() && port.service !in rule.services) continue
+            if (rule.services.isNotEmpty()) {
+                if (port.service !in rule.services) continue
+            } else if (rule.ports.isNotEmpty()) {
+                if (port.port !in rule.ports) continue
+            }
 
             var matched = false
             if (rule.bannerContains.isNotEmpty()) {

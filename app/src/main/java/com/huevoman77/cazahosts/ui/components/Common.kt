@@ -348,8 +348,8 @@ fun SliderRow(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
-    onChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onChange: (Float) -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {

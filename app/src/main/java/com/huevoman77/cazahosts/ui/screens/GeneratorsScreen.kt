@@ -54,7 +54,7 @@ private enum class GenType(val label: String) {
 fun GeneratorsScreen() {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var type by remember { mutableStateOf(GenType.CONTRASENAS) }
+    var genType by remember { mutableStateOf(GenType.CONTRASENAS) }
     var results by remember { mutableStateOf<List<String>>(emptyList()) }
 
     var count by remember { mutableStateOf(20f) }
@@ -73,7 +73,7 @@ fun GeneratorsScreen() {
     var maxLen by remember { mutableStateOf(14f) }
 
     fun generate() {
-        results = when (type) {
+        results = when (genType) {
             GenType.CONTRASENAS -> Generators.passwords(
                 count = count.toInt(),
                 length = length.toInt(),
@@ -132,9 +132,9 @@ fun GeneratorsScreen() {
             ) {
                 GenType.entries.forEach { t ->
                     FilterChip(
-                        selected = type == t,
+                        selected = genType == t,
                         onClick = {
-                            type = t
+                            genType = t
                             results = emptyList()
                         },
                         label = { Text(t.label) }
@@ -151,7 +151,7 @@ fun GeneratorsScreen() {
                 accent = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                when (type) {
+                when (genType) {
                     GenType.CONTRASENAS -> {
                         SliderRow("Cuántas", "${count.toInt()}", count, 1f..500f) { count = it }
                         SliderRow("Longitud", "${length.toInt()}", length, 6f..64f) { length = it }

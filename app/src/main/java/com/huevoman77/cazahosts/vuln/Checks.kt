@@ -37,7 +37,11 @@ object Checks {
         val ctx = SSLContext.getInstance("TLS")
         ctx.init(null, arrayOf<TrustManager>(trustAll), SecureRandom())
         val raw = Net.connect(ip, port, timeoutMs) ?: return null
-        ctx.socketFactory.createSocket(raw, ip, port, true) as Socket
+        raw.soTimeout = timeoutMs
+        val ssl = ctx.socketFactory.createSocket(raw, ip, port, true) as SSLSocket
+        ssl.soTimeout = timeoutMs
+        ssl.startHandshake()
+        ssl
     } catch (e: Exception) {
         null
     }
@@ -47,7 +51,7 @@ object Checks {
         return try {
             val session = socket.session
             val cert = try {
-                socket.peerCertificates.firstOrNull() as? X509Certificate
+                session.peerCertificates.firstOrNull() as? X509Certificate
             } catch (e: Exception) {
                 null
             }
