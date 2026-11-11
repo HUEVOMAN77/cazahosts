@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.huevoman77.cazahosts.MainActivity
 import com.huevoman77.cazahosts.R
@@ -27,17 +28,24 @@ class ScanService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startForeground(NOTIF_ID, buildNotification("Iniciando escaneo"))
+        if (!promote("Iniciando escaneo")) stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIF_ID, buildNotification("Escaneando"))
+        if (!promote("Escaneando")) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (updater == null) {
             updater = CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
                 while (isActive) {
                     delay(1500)
                     val manager = getSystemService(NotificationManager::class.java) ?: continue
-                    manager.notify(NOTIF_ID, buildNotification(ScanRepository.progress.value.phase))
+                    try {
+                        manager.notify(NOTIF_ID, buildNotification(ScanRepository.progress.value.phase))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "No se pudo actualizar la notificación", e)
+                    }
                 }
             }
         }
@@ -51,6 +59,15 @@ class ScanService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Si el sistema no deja al servicio en primer plano, la app no debe caer. */
+    private fun promote(phase: String): Boolean = try {
+        startForeground(NOTIF_ID, buildNotification(phase))
+        true
+    } catch (e: Exception) {
+        Log.w(TAG, "No se pudo iniciar el servicio en primer plano", e)
+        false
+    }
 
     private fun buildNotification(phase: String): Notification {
         val progress = ScanRepository.progress.value
@@ -87,5 +104,6 @@ class ScanService : Service() {
     companion object {
         const val CHANNEL_ID = "scan_channel"
         private const val NOTIF_ID = 4201
+        private const val TAG = "CazaHosts"
     }
 }

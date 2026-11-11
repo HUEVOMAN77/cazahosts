@@ -138,7 +138,7 @@ fun FindingsScreen() {
                 }
             }
 
-            items(filtered, key = { it.second.id + it.first }) { (ip, finding) ->
+            items(filtered, key = { it.second.id + ":" + it.first + ":" + it.second.port }) { (ip, finding) ->
                 FindingCard(ip = ip, finding = finding)
             }
         }

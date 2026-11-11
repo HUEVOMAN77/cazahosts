@@ -291,12 +291,12 @@ fun ScannerScreen(settings: AppSettings) {
                         text = "Iniciar escaneo",
                         icon = Icons.Outlined.PlayArrow,
                         onClick = {
-                            val ports = Fingerprint.portsForPreset(portPreset, customPorts)
                             ScanRepository.start(
                                 ScanConfig(
                                     targets = target,
                                     mode = mode,
-                                    portList = ports,
+                                    portPreset = portPreset,
+                                    customPorts = customPorts,
                                     concurrency = concurrency.toInt(),
                                     timeoutMs = timeout.toInt(),
                                     grabBanner = prefs.grabBanner,

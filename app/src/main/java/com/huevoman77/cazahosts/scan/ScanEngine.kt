@@ -34,7 +34,8 @@ data class ScanConfig(
     val targets: String = "",
     val mode: ScanMode = ScanMode.HOSTS_PORTS,
     val probePorts: List<Int> = listOf(80, 443, 22, 21, 445, 8080, 8443, 3389, 23, 3306, 139, 53, 5555, 9000),
-    val portList: List<Int> = emptyList(),
+    val portPreset: String = "top",
+    val customPorts: String = "",
     val concurrency: Int = 96,
     val timeoutMs: Int = 700,
     val grabBanner: Boolean = true,
@@ -162,7 +163,7 @@ class ScanEngine(private val config: ScanConfig) {
                     running = true
                 )
             )
-            val portList = if (config.portList.isNotEmpty()) config.portList else Fingerprint.topPortsList()
+            val portList = Fingerprint.portsForPreset(config.portPreset, config.customPorts)
             val tasks = Channel<Pair<String, Int>>(capacity = 8192)
             val job = launch(Dispatchers.IO) {
                 for (host in aliveList) {
@@ -217,7 +218,7 @@ class ScanEngine(private val config: ScanConfig) {
         // ------------------------------------------------------------- resultado
         val finals = aliveList.map { host ->
             val ports = portsByHost[host.ip]?.toList() ?: emptyList()
-            val findings = findingsByHost[host.ip]?.toList() ?: emptyList()
+            val findings = findingsByHost[host.ip]?.toList()?.distinctBy { "${it.id}:${it.port}" } ?: emptyList()
             val services = ports.map { it.service }.distinct()
             val host2 = host.copy(
                 openPorts = ports.sortedBy { it.port },

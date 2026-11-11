@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Rocket
 import androidx.compose.material.icons.outlined.Router
@@ -25,9 +28,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.huevoman77.cazahosts.core.Net
@@ -42,6 +50,7 @@ import com.huevoman77.cazahosts.ui.components.SectionCard
 import com.huevoman77.cazahosts.ui.components.StatTile
 import com.huevoman77.cazahosts.ui.theme.Coral
 import com.huevoman77.cazahosts.ui.theme.Mint
+import com.huevoman77.cazahosts.util.CrashLog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,10 +63,12 @@ fun PanelScreen(
     onOpenSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val hosts by ScanRepository.hosts.collectAsState()
     val progress by ScanRepository.progress.collectAsState()
     val summary by ScanRepository.summary.collectAsState()
     val sessions by ScanRepository.sessions.collectAsState()
+    var lastError by remember { mutableStateOf(CrashLog.last(context)) }
 
     val alive = hosts.count { it.alive }
     val ports = hosts.sumOf { it.openPorts.size }
@@ -179,6 +190,42 @@ fun PanelScreen(
                         onClick = onOpenFindings,
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+        }
+
+        if (lastError.isNotEmpty()) {
+            item {
+                SectionCard(
+                    title = "Último error",
+                    subtitle = "La app se cerró inesperadamente. Copiá el detalle para reportarlo.",
+                    icon = Icons.Outlined.BugReport,
+                    accent = Coral,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = lastError.lineSequence().take(4).joinToString("\n"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        com.huevoman77.cazahosts.ui.components.SecondaryButton(
+                            text = "Copiar",
+                            icon = Icons.Outlined.ContentCopy,
+                            onClick = { clipboard.setText(AnnotatedString(lastError)) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        com.huevoman77.cazahosts.ui.components.SecondaryButton(
+                            text = "Borrar",
+                            icon = Icons.Outlined.Delete,
+                            onClick = {
+                                CrashLog.clear(context)
+                                lastError = ""
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
