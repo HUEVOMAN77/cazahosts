@@ -109,7 +109,7 @@ fun ScannerScreen(settings: AppSettings) {
         item {
             com.huevoman77.cazahosts.ui.components.SectionCard(
                 title = "Objetivo",
-                subtitle = "Acepta CIDR, rango, comodín o lista separada por comas",
+                subtitle = "Acepta CIDR, rango, comodín, un nombre de host o lista separada por comas",
                 icon = Icons.Outlined.Search
             ) {
                 OutlinedTextField(

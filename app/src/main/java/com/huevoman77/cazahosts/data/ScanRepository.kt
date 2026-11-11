@@ -2,7 +2,7 @@ package com.huevoman77.cazahosts.data
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.util.Log
 import com.huevoman77.cazahosts.scan.ScanConfig
 import com.huevoman77.cazahosts.scan.ScanEngine
 import com.huevoman77.cazahosts.scan.ScanProgress
@@ -72,6 +72,11 @@ object ScanRepository {
 
     fun start(config: ScanConfig) {
         if (job?.isActive == true) return
+        if (config.targets.isBlank()) {
+            _summary.value = ScanSummary(error = "Falta el objetivo. Usa 192.168.1.0/24, 10.0.0.1-254, una IP sola o un nombre de host.")
+            _progress.value = ScanProgress(phase = "Falta el objetivo", running = false)
+            return
+        }
         synchronized(hostLock) {
             hostMap.clear()
             pending = 0
@@ -115,8 +120,6 @@ object ScanRepository {
                 val message = error.message ?: error.javaClass.simpleName
                 _summary.value = ScanSummary(error = message)
                 _progress.value = _progress.value.copy(running = false, phase = "Error: $message")
-            } finally {
-                stopService()
             }
         }
     }
@@ -151,17 +154,19 @@ object ScanRepository {
         _hosts.value = snapshot
     }
 
+    /**
+     * El servicio se arranca como servicio normal y el mismo se promueve a
+     * primer plano desde su onCreate. Pedir el servicio "en primer plano" desde
+     * aca obligaba al sistema a esperar el aviso con reloj, y si el escaneo
+     * terminaba antes de que el hilo principal promoviera el servicio, el
+     * sistema cerraba la app con ForegroundServiceDidNotStartInTimeException.
+     */
     private fun startService() {
         val ctx = appContext ?: return
         try {
-            val intent = Intent(ctx, ScanService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(intent)
-            } else {
-                ctx.startService(intent)
-            }
+            ctx.startService(Intent(ctx, ScanService::class.java))
         } catch (e: Exception) {
-            // el escaneo sigue en el repositorio aunque el servicio no arranque
+            Log.w("CazaHosts", "No se pudo iniciar el servicio de escaneo", e)
         }
     }
 

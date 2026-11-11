@@ -18,6 +18,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.net.InetAddress
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -73,20 +75,54 @@ class ScanEngine(private val config: ScanConfig) {
     private val findingsByHost = ConcurrentHashMap<String, MutableList<VulnFinding>>()
     private val aliveHosts = Collections.synchronizedList(mutableListOf<HostResult>())
 
+    companion object {
+        private const val DNS_TIMEOUT_MS = 5000L
+    }
+
     fun cancel() {
         cancelled.set(true)
     }
 
     fun isCancelled(): Boolean = cancelled.get()
 
+    /**
+     * Acepta rangos de IP y tambien nombres de host: "ejemplo.com" se resuelve
+     * por DNS y se escanea la IP que devuelva.
+     */
+    private suspend fun resolveTargets(input: String): List<TargetRange> {
+        val tokens = input.replace(Regex("\\s*-\\s*"), "-")
+            .split(',', ';', '\n', ' ', '\t')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        val out = mutableListOf<TargetRange>()
+        for (token in tokens) {
+            val parsed = IpUtils.parseTargets(token)
+            if (parsed.isNotEmpty()) {
+                out += parsed
+                continue
+            }
+            val address = resolveHost(token) ?: continue
+            val value = IpUtils.ipv4ToLong(address) ?: continue
+            out += TargetRange(value, value, token)
+        }
+        return out
+    }
+
+    private suspend fun resolveHost(name: String): String? {
+        val address = withTimeoutOrNull(DNS_TIMEOUT_MS) {
+            withContext(Dispatchers.IO) { InetAddress.getByName(name) }
+        }
+        return address?.hostAddress
+    }
+
     suspend fun run(
         onHost: (HostResult) -> Unit,
         onProgress: (ScanProgress) -> Unit
     ): ScanSummary = coroutineScope {
         val started = System.currentTimeMillis()
-        val ranges = IpUtils.parseTargets(config.targets)
+        val ranges = resolveTargets(config.targets)
         if (ranges.isEmpty()) {
-            return@coroutineScope ScanSummary(error = "No se entendió el objetivo. Usa 192.168.1.0/24, 10.0.0.1-254 o una IP sola.")
+            return@coroutineScope ScanSummary(error = "No se entendió el objetivo. Usa 192.168.1.0/24, 10.0.0.1-254, una IP sola o un nombre de host como ejemplo.com.")
         }
 
         val totalHosts = ranges.sumOf { it.size }.coerceAtMost(config.maxHosts)
