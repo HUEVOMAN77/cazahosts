@@ -46,7 +46,7 @@ jobs:
           KS_PASS: ${{ secrets.KS_PASS }}
           KS_ALIAS: ${{ secrets.KS_ALIAS }}
           KS_FILE: upload-keystore.jks
-        run: ./gradlew --no-daemon assembleRelease
+        run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease
 
       - name: Subir el APK a la release
         if: startsWith(github.ref, 'refs/tags/v')
