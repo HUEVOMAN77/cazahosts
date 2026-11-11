@@ -39,7 +39,7 @@ manda datos a ningún servidor y la base de vulnerabilidades viaja dentro del AP
 
 ## Uso rápido
 
-1. En **Escanear**, tocá *Mi red* para cargar el `/24` de tu Wi-Fi o escribí tu rango.
+1. En **Escanear**, tocá *Mi red* para cargar el `/24` de tu Wi-Fi o escribí tu rango, una IP sola o el nombre de un host (`ejemplo.com`, que se resuelve por DNS).
 2. Elegí el modo: *Solo hosts*, *Hosts y puertos* o *Auditoría completa*.
 3. Ajustá hilos y tiempo de espera si tu red es lenta.
 4. Tocá **Iniciar escaneo**. Los resultados aparecen en vivo.
