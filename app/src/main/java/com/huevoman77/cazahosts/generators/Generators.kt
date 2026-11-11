@@ -149,9 +149,9 @@ object Generators {
         val out = mutableListOf<String>()
         for (u in users) {
             out += u
-            out += "$u2024"
-            out += "$u2025"
-            out += "${u.replace('.', '')}123"
+            out += "${u}2024"
+            out += "${u}2025"
+            out += "${u.replace(".", "")}123"
             out += "${u.substringBefore('.')}"
             out += base.randomOrNull() ?: "1234"
         }

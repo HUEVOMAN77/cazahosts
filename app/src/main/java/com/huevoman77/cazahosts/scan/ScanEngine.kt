@@ -89,7 +89,7 @@ class ScanEngine(private val config: ScanConfig) {
         }
 
         val totalHosts = ranges.sumOf { it.size }.coerceAtMost(config.maxHosts)
-        var scanned = 0L
+        val scanned = AtomicLong(0L)
         val alive = AtomicInteger(0)
         val portsFound = AtomicInteger(0)
         val findingCount = AtomicInteger(0)

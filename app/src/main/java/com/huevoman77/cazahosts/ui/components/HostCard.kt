@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.huevoman77.cazahosts.data.HostResult
 import com.huevoman77.cazahosts.data.Severity
 import com.huevoman77.cazahosts.data.WatchedHost
+import com.huevoman77.cazahosts.ui.theme.severityColor
 
 @Composable
 fun HostCard(

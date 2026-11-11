@@ -83,5 +83,6 @@ data class WatchedHost(
     val alive: Boolean = false,
     val lastStateChange: Long = 0,
     val history: List<Long> = emptyList(),
-    val portsOpen: Int = 0
+    val portsOpen: Int = 0,
+    val mac: String = ""
 )

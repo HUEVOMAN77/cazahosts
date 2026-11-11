@@ -58,7 +58,7 @@ class ResultStore(context: Context) {
                     host.openPorts.joinToString(",") { "${it.port}/${it.service}" },
                     host.findings.joinToString(" | ") { it.title },
                     maxSeverity,
-                    maxCvss
+                    maxCvss.toString()
                 ).joinToString(";") { it.replace(';', ',').replace("\n", " ") }
             )
         }
