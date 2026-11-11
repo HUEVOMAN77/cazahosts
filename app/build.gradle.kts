@@ -25,7 +25,7 @@ android {
     signingConfigs {
         if (keystoreBase64 != null && keystorePassword != null) {
             create("upload") {
-                storeFile = file(
+                storeFile = rootProject.file(
                     providers.environmentVariable("KS_FILE").orNull ?: "upload-keystore.jks"
                 )
                 storePassword = keystorePassword
