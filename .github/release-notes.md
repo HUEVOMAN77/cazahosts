@@ -29,9 +29,14 @@ El buscador de subdominios deja de ser solo eso: ahora dice cuáles sirven de ve
 - El certificado vencido o por vencer se marca en ámbar y en rojo.
 - La exportación de texto incluye estado HTTP, SNI, payload, puertos y certificado.
 
+### Correcciones
+
+- La lista de equipos vigilados ya no se cae: al mandar subdominios al checker, dos nombres que
+  resuelven a la misma IP ya no entran con claves repetidas.
+
 ### Detalles técnicos
 
 - Compilado con Kotlin 2.0.21, Jetpack Compose (BOM 2024.12.01), Material 3 y coroutines.
 - dnsjava 3.7.1, OkHttp 4.12.0 y SLF4J.
 - Requiere Android 8.0 (API 26) o superior.
-- 58 pruebas unitarias en verde, 9 de ellas de comprobación en vivo contra Internet que se activan a mano.
+- 61 pruebas unitarias en verde, 9 de ellas de comprobación en vivo contra Internet que se activan a mano.
