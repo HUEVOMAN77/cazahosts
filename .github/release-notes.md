@@ -34,9 +34,11 @@ Escanear tu red, encontrarte con todos sus subdominios y saber qué está expues
 - El verificador de vivos ya no promete que siga revisando con la app cerrada.
 - El motor DNS prueba el siguiente servidor cuando uno no contesta y descarta las respuestas que no corresponden a la consulta.
 - El DNS comodín sólo se descarta cuando las tres muestras aleatorias dan la misma dirección, así no se pierden hosts reales.
+- La lectura del SNMP ya toma el código de error en el lugar correcto y muestra la descripción real del equipo.
+- El aviso del puerto 53 ya no afirma que hay un recursor abierto cuando sólo es el reenviador del router.
 
 ### Detalles técnicos
 
 - Compilado con Kotlin 2.0.21, Jetpack Compose (BOM 2024.12.01), Material 3 y coroutines.
 - Requiere Android 8.0 (API 26) o superior.
-- 31 pruebas unitarias en verde: parser DNS, base de datos de vulnerabilidades, generadores, huellas de servicio y utilidades de IP.
+- 36 pruebas unitarias en verde: parser DNS, SNMP, base de datos de vulnerabilidades, generadores, huellas de servicio y utilidades de IP.

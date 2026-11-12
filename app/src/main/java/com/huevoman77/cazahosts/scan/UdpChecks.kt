@@ -67,7 +67,7 @@ object UdpChecks {
             port = PortFinding(
                 port = 161,
                 service = "snmp",
-                product = if (accepted) "SNMP agente" else "SNMP agente",
+                product = if (accepted) "SNMP agente con comunidad publica" else "SNMP agente",
                 version = "SNMPv1",
                 banner = description.take(200),
                 state = "udp"
@@ -76,25 +76,32 @@ object UdpChecks {
         )
     }
 
-    private fun snmpErrorStatus(response: ByteArray): Int {
+    /** Lee el error-status del GetResponse recorriendo los TLV del PDU. */
+    internal fun snmpErrorStatus(response: ByteArray): Int {
         for (i in response.indices) {
-            if (response[i] == 0xA2.toByte()) {
-                val index = i + 2 + 6 + 2
-                if (index < response.size) return response[index].toInt() and 0xFF
+            if (response[i] != 0xA2.toByte()) continue
+            var p = i + 2
+            repeat(3) {
+                if (p >= response.size || response[p] != 0x02.toByte()) return -1
+                val len = response[p + 1].toInt() and 0xFF
+                if (len > 4 || p + 2 + len > response.size) return -1
+                if (it == 2) return response[p + 2].toInt() and 0xFF
+                p += 2 + len
             }
+            return -1
         }
         return -1
     }
 
     /** Extrae el texto de sysDescr de la respuesta SNMP. */
-    private fun snmpText(response: ByteArray): String {
+    internal fun snmpText(response: ByteArray): String {
         for (i in response.indices) {
-            if (response[i] == 0x04.toByte()) {
-                val len = response[i + 1].toInt() and 0xFF
-                if (len in 4..200 && i + 2 + len <= response.size) {
-                    val value = String(response, i + 2, len, Charsets.UTF_8)
-                    if (value.all { it.isLetterOrDigit() || it in " .-_/()" }) return value
-                }
+            if (response[i] != 0x04.toByte()) continue
+            if (i + 1 >= response.size) continue
+            val len = response[i + 1].toInt() and 0xFF
+            if (len in 3..200 && i + 2 + len <= response.size) {
+                val value = String(response, i + 2, len, Charsets.UTF_8)
+                if (value.none { it.isISOControl() }) return value.trim()
             }
         }
         return ""
@@ -118,11 +125,11 @@ object UdpChecks {
         if (resolved) {
             findings += VulnFinding(
                 id = "dns-recursive-open",
-                severity = Severity.MEDIA.name,
-                title = "Servidor DNS recursivo expuesto",
-                detail = "El puerto 53 resuelve nombres externos para cualquiera que pregunte. " +
-                    "Se puede usar para amplificar ataques o consultar redes internas.",
-                fix = "Limitar las consultas recursivas a las IP autorizadas y cerrar el acceso desde otras redes.",
+                severity = Severity.INFO.name,
+                title = "El puerto 53 contesta consultas de nombres externos",
+                detail = "Este equipo resuelve nombres de Internet para quien pregunte. Si es el router de la red, " +
+                    "es el comportamiento normal de su reenviador; si es otro equipo, conviene revisar quien puede usarlo.",
+                fix = "Si no debe resolver nombres externos, restringir las consultas a las IP autorizadas o cerrar el puerto 53.",
                 port = 53
             )
         }

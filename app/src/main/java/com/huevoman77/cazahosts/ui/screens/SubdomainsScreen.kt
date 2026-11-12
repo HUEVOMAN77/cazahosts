@@ -45,6 +45,7 @@ import com.huevoman77.cazahosts.data.ScannerState
 import com.huevoman77.cazahosts.data.SubdomainRepository
 import com.huevoman77.cazahosts.data.SubdomainResult
 import com.huevoman77.cazahosts.dns.DnsType
+import com.huevoman77.cazahosts.dns.MAX_SUBDOMAIN_CANDIDATES
 import com.huevoman77.cazahosts.dns.SubdomainConfig
 import com.huevoman77.cazahosts.dns.SubdomainEngine
 import com.huevoman77.cazahosts.dns.SubdomainWordlist
@@ -127,7 +128,7 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
         } else {
             emptyList()
         }
-        (base + patterns).distinct()
+        (base + patterns).distinct().take(MAX_SUBDOMAIN_CANDIDATES)
     }
 
     val filtered = remember(results, filter, search) {

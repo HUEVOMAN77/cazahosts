@@ -24,6 +24,9 @@ data class SubdomainConfig(
     val maxCandidates: Int = 30000
 )
 
+/** Tope de nombres candidatos por corrida para no ahogar la red. */
+const val MAX_SUBDOMAIN_CANDIDATES = 30000
+
 data class SubdomainRun(
     val results: List<SubdomainResult>,
     val wildcardIps: Set<String>,
