@@ -25,6 +25,9 @@ data class SubdomainProgress(
     val startedAt: Long = 0,
     val discarded: Int = 0,
     val wildcard: Boolean = false,
+    val fromZone: Int = 0,
+    val fromCertificate: Int = 0,
+    val zoneServer: String = "",
     val error: String = ""
 ) {
     val elapsedMs: Long get() = if (startedAt == 0L) 0L else System.currentTimeMillis() - startedAt
@@ -107,11 +110,10 @@ object SubdomainRepository {
                 val run = e.run(
                     onResult = { result -> upsert(result) },
                     onProgress = { tested, found ->
-                        _progress.value = _progress.value.copy(
-                            tested = tested,
-                            found = found,
-                            phase = "Probando nombres"
-                        )
+                        _progress.value = _progress.value.copy(tested = tested, found = found)
+                    },
+                    onPhase = { phase ->
+                        _progress.value = _progress.value.copy(phase = phase)
                     }
                 )
                 _progress.value = _progress.value.copy(
@@ -119,9 +121,12 @@ object SubdomainRepository {
                     phase = "Finalizado",
                     tested = run.tested,
                     found = run.results.size,
-                    total = run.candidates,
+                    total = maxOf(run.candidates, run.tested),
                     discarded = run.discardedWildcard,
-                    wildcard = run.wildcardIps.isNotEmpty()
+                    wildcard = run.wildcardIps.isNotEmpty(),
+                    fromZone = run.fromZone,
+                    fromCertificate = run.fromCertificate,
+                    zoneServer = run.zoneServer
                 )
                 val session = SubdomainSession(
                     id = UUID.randomUUID().toString(),
@@ -172,10 +177,20 @@ object SubdomainRepository {
         sb.appendLine()
         for (item in _results.value) {
             sb.appendLine(item.host)
+            sb.appendLine("   Origen: ${item.origin}")
             if (item.addresses.isNotEmpty()) sb.appendLine("   IPs: ${item.addresses.joinToString(", ")}")
             if (item.ipv6.isNotEmpty()) sb.appendLine("   IPv6: ${item.ipv6.joinToString(", ")}")
             if (item.cname.isNotEmpty()) sb.appendLine("   CNAME: ${item.cname}")
             if (item.httpStatus > 0) sb.appendLine("   HTTP ${item.httpStatus} ${item.httpTitle}")
+            if (item.directStatus > 0) sb.appendLine("   HTTP directo: ${item.directStatus}")
+            sb.appendLine("   SNI: ${if (item.sniOk) "funciona" else "no funciona"}${if (item.sniRequired) " (solo con SNI)" else ""}")
+            if (item.payloadStatus > 0) {
+                sb.appendLine("   Payload: ${item.payloadStatus} ${if (item.payloadOk) "(aceptado)" else "(rechazado)"}")
+            }
+            if (item.openPorts.isNotEmpty()) {
+                sb.appendLine("   Puertos: ${item.openPorts.joinToString(", ") { "${it.port}/${it.service}" }}")
+            }
+            if (item.certIssuer.isNotEmpty()) sb.appendLine("   Certificado: ${item.certIssuer}")
             item.records.forEach { sb.appendLine("   ${it.type}: ${it.value}") }
         }
         return sb.toString()

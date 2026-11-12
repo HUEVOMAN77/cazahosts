@@ -107,5 +107,16 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // Motor DNS completo: todos los tipos de registro, EDNS, DNSSEC y
+    // transferencia de zona AXFR.
+    implementation("dnsjava:dnsjava:3.7.1")
+    // Cliente HTTP moderno para clasificar subdominios: estado, SNI, carga
+    // util y certificado del servidor.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.slf4j:slf4j-api:2.0.13")
+    // dnsjava registra con slf4j; sin un proveedor el arranque imprime un aviso
+    // en el logcat, asi que se le da uno mudo.
+    implementation("org.slf4j:slf4j-nop:2.0.13")
+
     testImplementation("junit:junit:4.13.2")
 }

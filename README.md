@@ -14,10 +14,16 @@ viaja dentro del APK.
   listas de IP y detecta los equipos que responden. Hasta 65 536 direcciones por pasada.
 - **Escaneo de puertos**: con perfiles *Comunes*, *Expandido*, *1-65535* o una lista
   propia (`22,80,443,8000-8010`). Captura banners e identifica servicio y versión.
-- **Fuerza bruta DNS de subdominios**: motor DNS propio que arma las consultas a nivel
-  de protocolo (UDP y TCP), prueba diccionarios y patrones contra un dominio y devuelve
-  los nombres que existen de verdad.
-- **Base de vulnerabilidades**: correlaciona cada banner con CVEs conocidos (regreSSHion,
+- **Fuerza bruta DNS de subdominios**: motor DNS construido sobre `dnsjava` (la librería de
+  referencia en Java) que resuelve nombres de verdad, lee la respuesta completa (CNAME, NS,
+  MX, TXT, SOA, SRV), reintenta por TCP cuando el servidor recorta la respuesta y rota
+  entre varios resolvers. Prueba diccionarios, patrones y fuentes externas contra un dominio
+  y devuelve los nombres que existen.
+- **Buscador de subdominios**: cada subdominio se revisa a fondo y se informa si responde
+  con **HTTP 200** o con otro código, qué **puertos** tiene abiertos, si es funcional para
+  **SNI** (TLS con su propio nombre), para **payload** (acepta un POST con cuerpo) o para
+  **HTTP directo**, quién emitió el certificado y cuánto le falta para vencer.
+- **Bases de vulnerabilidades**: correlaciona cada banner con CVEs conocidos (regreSSHion,
   vsftpd 2.3.4, ProFTPD mod_copy, Apache, nginx, Redis, Jenkins, Grafana, Docker API,
   Kubernetes API, y más) y con malas prácticas de exposición.
 - **Chequeos activos no destructivos**: FTP anónimo, Redis sin contraseña, MongoDB,
@@ -72,6 +78,35 @@ candidatos hasta encontrar los que resuelven.
 Los servidores DNS se eligen a mano (automático, el de tu red, 1.1.1.1, 8.8.8.8 o
 9.9.9.9) y el motor rota entre ellos y reintenta ante respuesta truncada.
 
+### Fuentes de nombres
+
+El motor no se limita al diccionario. En la sección **Fuentes** se pueden activar:
+
+- **Transferencia de zona (AXFR)**: pide la zona completa al servidor de nombres. La
+  mayoría de los servidores la niegan, pero cuando la publican aparecen de una sola vez
+  todos los hosts del dominio, incluidos los que no están en ningún diccionario.
+- **Registros de certificados (Certificate Transparency)**: consulta los logs públicos de
+  certificados para saber qué nombres recibieron un certificado. Primero usa Cert Spotter
+  (responde en menos de un segundo) y, si no hay respuesta, cae a crt.sh.
+
+### Qué se revisa de cada subdominio
+
+Con **Revisar el sitio web** y **Revisar puertos abiertos** activados, cada host se
+clasifica así:
+
+| Dato | Qué significa |
+| --- | --- |
+| **HTTP 200** | El sitio responde con 200. Si aparece otro código (301, 302, 403, 404, 500…) se muestra tal cual: el 200 es el que significa que la página está viva y usable. |
+| **HTTP directo** | Responde por HTTP sin cifrar (puerto 80). |
+| **Con SNI** | El TLS funciona enviando el nombre propio y el certificado cubre ese nombre. |
+| **Solo con SNI** | Sin SNI el servidor entrega otro certificado o no completa el saludo: depende del nombre. |
+| **Payload** | Acepta un POST con cuerpo y contesta con 2xx o 3xx en vez de rechazarlo. |
+| **Puertos** | Puertos abiertos en la dirección del subdominio, con el nombre del servicio. |
+| **Certificado** | Quién lo emitió, su SAN y los días que le quedan para vencer. |
+
+Los filtros de la lista dejan ver solo los *HTTP 200*, los *SNI ok*, los *Payload ok* o
+los que tienen puertos abiertos.
+
 ## Compilar desde cero
 
 ```bash
@@ -95,7 +130,7 @@ Para correr las pruebas:
 app/src/main/java/com/huevoman77/cazahosts/
 ├── core/      utilidades de IP, sockets, tabla ARP y fabricantes (MAC)
 ├── data/      modelos, ajustes, guardado de resultados y repositorio de escaneo
-├── dns/       protocolo DNS, cliente, diccionario y motor de subdominios
+├── dns/       cliente DNS (dnsjava), diccionario, fuentes y motor de subdominios
 ├── scan/      motor de escaneo, captura de banners y fingerprinting de servicios
 ├── vuln/      base de reglas CVE y chequeos activos
 ├── creds/     auditoría de credenciales

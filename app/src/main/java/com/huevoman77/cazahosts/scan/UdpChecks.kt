@@ -4,9 +4,13 @@ import com.huevoman77.cazahosts.core.Net
 import com.huevoman77.cazahosts.data.PortFinding
 import com.huevoman77.cazahosts.data.Severity
 import com.huevoman77.cazahosts.data.VulnFinding
-import com.huevoman77.cazahosts.dns.DnsCodec
-import com.huevoman77.cazahosts.dns.DnsType
-import com.huevoman77.cazahosts.dns.RData
+import com.huevoman77.cazahosts.dns.absoluteDnsName
+import org.xbill.DNS.ARecord
+import org.xbill.DNS.DClass
+import org.xbill.DNS.Message
+import org.xbill.DNS.Record
+import org.xbill.DNS.Section
+import org.xbill.DNS.Type
 
 /**
  * Sondeos UDP: algunos servicios relevantes solo escuchan por UDP y el
@@ -109,18 +113,25 @@ object UdpChecks {
 
     private fun dns(ip: String, timeoutMs: Int): Result? {
         val name = "consulta${(Math.random() * 100000).toInt()}.com"
-        val id = (Math.random() * 0xFFFF).toInt() and 0xFFFF
-        val packet = DnsCodec.buildQuery(id, name, DnsType.A)
+        val packet = try {
+            Message.newQuery(
+                Record.newRecord(
+                    absoluteDnsName(name) ?: return null,
+                    Type.A,
+                    DClass.IN
+                )
+            ).toWire()
+        } catch (e: Exception) {
+            return null
+        }
         val response = Net.udpProbe(ip, 53, packet, timeoutMs) ?: return null
         val parsed = try {
-            DnsCodec.parseResponse(response)
+            Message(response)
         } catch (e: Exception) {
             null
         } ?: return null
-        val resolved = parsed.answers.any { rec ->
-            val data = rec.data
-            data is RData.Address
-        }
+        val answers = parsed.getSection(Section.ANSWER)
+        val resolved = answers.any { it is ARecord }
         val findings = mutableListOf<VulnFinding>()
         if (resolved) {
             findings += VulnFinding(
@@ -139,7 +150,7 @@ object UdpChecks {
                 service = "dns",
                 product = "Servidor DNS",
                 version = "UDP",
-                banner = "${parsed.questions.firstOrNull()?.name ?: name} -> ${parsed.answers.size} respuestas",
+                banner = "${parsed.question?.name?.toString(true) ?: name} -> ${answers.size} respuestas",
                 state = "udp"
             ),
             findings = findings

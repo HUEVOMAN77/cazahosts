@@ -44,6 +44,7 @@ import com.huevoman77.cazahosts.data.CheckerStore
 import com.huevoman77.cazahosts.data.ScannerState
 import com.huevoman77.cazahosts.data.SubdomainRepository
 import com.huevoman77.cazahosts.data.SubdomainResult
+import com.huevoman77.cazahosts.data.SubdomainOrigin
 import com.huevoman77.cazahosts.dns.DnsType
 import com.huevoman77.cazahosts.dns.MAX_SUBDOMAIN_CANDIDATES
 import com.huevoman77.cazahosts.dns.SubdomainConfig
@@ -70,6 +71,10 @@ private enum class ResolverMode(val label: String) {
 private enum class ResultFilter(val label: String) {
     TODOS("Todos"),
     CON_WEB("Con web"),
+    HTTP_200("HTTP 200"),
+    SNI("SNI ok"),
+    PAYLOAD("Payload ok"),
+    CON_PUERTOS("Con puertos"),
     CON_CNAME("Con CNAME"),
     CON_IPV6("IPv6")
 }
@@ -95,6 +100,9 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
     var chaseCname by remember { mutableStateOf(true) }
     var probeHttp by remember { mutableStateOf(true) }
     var reverseDns by remember { mutableStateOf(true) }
+    var useZoneTransfer by remember { mutableStateOf(true) }
+    var useCertificate by remember { mutableStateOf(true) }
+    var scanPorts by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(ResultFilter.TODOS) }
     var search by remember { mutableStateOf("") }
 
@@ -136,6 +144,10 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
             val matchesFilter = when (filter) {
                 ResultFilter.TODOS -> true
                 ResultFilter.CON_WEB -> item.httpStatus > 0
+                ResultFilter.HTTP_200 -> item.httpStatus == 200
+                ResultFilter.SNI -> item.sniOk
+                ResultFilter.PAYLOAD -> item.payloadOk
+                ResultFilter.CON_PUERTOS -> item.openPorts.isNotEmpty()
                 ResultFilter.CON_CNAME -> item.cname.isNotEmpty()
                 ResultFilter.CON_IPV6 -> item.ipv6.isNotEmpty()
             }
@@ -323,7 +335,7 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
                 )
                 LabeledSwitch(
                     title = "Revisar el sitio web",
-                    subtitle = "Consulta cada subdominio y lee su titulo",
+                    subtitle = "HTTP directo, TLS con SNI y prueba de payload",
                     checked = probeHttp,
                     onChange = { probeHttp = it }
                 )
@@ -332,6 +344,35 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
                     subtitle = "Busca el PTR de cada direccion",
                     checked = reverseDns,
                     onChange = { reverseDns = it }
+                )
+            }
+        }
+
+        item {
+            SectionCard(
+                title = "Fuentes",
+                subtitle = "Donde se buscan los nombres ademas del diccionario",
+                icon = Icons.Outlined.TravelExplore,
+                accent = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                LabeledSwitch(
+                    title = "Transferencia de zona",
+                    subtitle = "Descarga la zona completa del dominio si el servidor la publica",
+                    checked = useZoneTransfer,
+                    onChange = { useZoneTransfer = it }
+                )
+                LabeledSwitch(
+                    title = "Registros de certificados",
+                    subtitle = "Busca en los logs publicos que nombres tienen certificado",
+                    checked = useCertificate,
+                    onChange = { useCertificate = it }
+                )
+                LabeledSwitch(
+                    title = "Revisar puertos abiertos",
+                    subtitle = "Barrido corto en la direccion de cada subdominio",
+                    checked = scanPorts,
+                    onChange = { scanPorts = it }
                 )
             }
         }
@@ -403,7 +444,10 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
                                     detectWildcard = detectWildcard,
                                     chaseCname = chaseCname,
                                     probeHttp = probeHttp,
-                                    reverseDns = reverseDns
+                                    reverseDns = reverseDns,
+                                    useZoneTransfer = useZoneTransfer,
+                                    useCertificateTransparency = useCertificate,
+                                    scanPorts = scanPorts
                                 )
                             )
                         },
@@ -425,6 +469,15 @@ fun SubdomainsScreen(onOpenScanner: () -> Unit) {
                 ) {
                     KeyValueRow(key = "Probados", value = "${progress.tested} / ${progress.total}")
                     KeyValueRow(key = "Encontrados", value = "${progress.found}")
+                    if (progress.fromZone > 0) {
+                        KeyValueRow(key = "De la zona", value = "${progress.fromZone}")
+                    }
+                    if (progress.fromCertificate > 0) {
+                        KeyValueRow(key = "De certificados", value = "${progress.fromCertificate}")
+                    }
+                    if (progress.zoneServer.isNotEmpty()) {
+                        KeyValueRow(key = "Servidor de zona", value = progress.zoneServer)
+                    }
                     if (progress.running) {
                         KeyValueRow(key = "Transcurrido", value = formatTime(progress.elapsedMs))
                         KeyValueRow(key = "Tiempo estimado", value = formatTime(progress.etaMs))
@@ -561,7 +614,8 @@ private fun SubdomainCard(item: SubdomainResult) {
     SectionCard(
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
         accent = when {
-            item.httpStatus in 200..399 -> MaterialTheme.colorScheme.primary
+            item.httpStatus == 200 -> MaterialTheme.colorScheme.primary
+            item.httpStatus >= 500 -> MaterialTheme.colorScheme.error
             item.httpStatus > 0 -> Amber
             else -> MaterialTheme.colorScheme.secondary
         }
@@ -574,7 +628,43 @@ private fun SubdomainCard(item: SubdomainResult) {
                 modifier = Modifier.weight(1f)
             )
             if (item.httpStatus > 0) {
-                Pill(text = "HTTP ${item.httpStatus}", accent = MaterialTheme.colorScheme.primary)
+                Pill(
+                    text = "HTTP ${item.httpStatus}",
+                    accent = when {
+                        item.httpStatus == 200 -> MaterialTheme.colorScheme.primary
+                        item.httpStatus >= 500 -> MaterialTheme.colorScheme.error
+                        else -> Amber
+                    }
+                )
+            }
+        }
+        if (item.sniOk || item.payloadOk || item.sniRequired || item.openPorts.isNotEmpty() ||
+            item.origin != SubdomainOrigin.BRUTE_FORCE
+        ) {
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (item.sniOk) {
+                    Pill(text = "SNI ok", accent = MaterialTheme.colorScheme.primary)
+                }
+                if (item.sniRequired) {
+                    Pill(text = "solo con SNI", accent = MaterialTheme.colorScheme.tertiary)
+                }
+                if (item.payloadOk) {
+                    Pill(text = "Payload ok", accent = MaterialTheme.colorScheme.primary)
+                } else if (item.payloadStatus > 0) {
+                    Pill(text = "Payload ${item.payloadStatus}", accent = Amber)
+                }
+                if (item.openPorts.isNotEmpty()) {
+                    Pill(text = "${item.openPorts.size} puertos", accent = MaterialTheme.colorScheme.secondary)
+                }
+                if (item.origin != SubdomainOrigin.BRUTE_FORCE) {
+                    Pill(text = item.origin, accent = MaterialTheme.colorScheme.tertiary)
+                }
             }
         }
         if (item.addresses.isNotEmpty()) {
@@ -614,6 +704,55 @@ private fun SubdomainCard(item: SubdomainResult) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
+        }
+        if (item.directStatus > 0) {
+            Text(
+                text = "HTTP directo: ${item.directStatus}",
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (item.sniStatus > 0) {
+            Text(
+                text = "Con SNI: ${item.sniStatus}",
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (item.payloadStatus > 0) {
+            Text(
+                text = "Payload: ${item.payloadStatus}",
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (item.openPorts.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Puertos " + item.openPorts.joinToString(", ") { "${it.port}${if (it.service.isNotEmpty()) "/" + it.service else ""}" },
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (item.certIssuer.isNotEmpty()) {
+            Text(
+                text = "Cert: ${item.certIssuer}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (item.certDaysLeft < 0) {
+                Text(
+                    text = "El certificado ya vencio",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else if (item.certDaysLeft <= 30) {
+                Text(
+                    text = "El certificado vence en ${item.certDaysLeft} dias",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Amber
+                )
+            }
         }
         if (item.records.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))

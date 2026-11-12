@@ -2,21 +2,35 @@ package com.huevoman77.cazahosts.dns
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.InputStream
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
+import org.xbill.DNS.AAAARecord
+import org.xbill.DNS.ARecord
+import org.xbill.DNS.CNAMERecord
+import org.xbill.DNS.DClass
+import org.xbill.DNS.Flags
+import org.xbill.DNS.Message
+import org.xbill.DNS.MXRecord
+import org.xbill.DNS.NSRecord
+import org.xbill.DNS.Name
+import org.xbill.DNS.PTRRecord
+import org.xbill.DNS.Record
+import org.xbill.DNS.Section
+import org.xbill.DNS.SimpleResolver
+import org.xbill.DNS.SOARecord
+import org.xbill.DNS.SRVRecord
+import org.xbill.DNS.TXTRecord
+import org.xbill.DNS.Type
+import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Cliente DNS sobre UDP crudo. A diferencia de InetAddress, este cliente permite
+ * Cliente DNS sobre dnsjava. A diferencia de InetAddress, este cliente permite
  * pedir cualquier tipo de registro, leer la respuesta completa (CNAME, NS, MX,
  * TXT, SOA, SRV) y rotar entre varios resolvers para no depender de uno solo.
+ * La libreria se encarga del detalle de bajo nivel: EDNS, reintento por TCP
+ * cuando la respuesta viene truncada y validacion del mensaje.
  */
 class DnsClient(
-    private val resolvers: List<String>,
+    resolvers: List<String>,
     private val timeoutMs: Int = 2000,
     private val retries: Int = 1
 ) {
@@ -26,35 +40,33 @@ class DnsClient(
     @Volatile
     var cancelled = false
 
-    private val pool: List<String> = resolvers.filter { it.isNotBlank() }.ifEmpty { listOf("1.1.1.1") }
+    private val pool: List<SimpleResolver> = buildPool(resolvers)
 
     suspend fun query(name: String, type: Int): DnsResponse? = withContext(Dispatchers.IO) {
-        val id = (Math.random() * 0xFFFF).toInt() and 0xFFFF
-        val packet = DnsCodec.buildQuery(id, name, type)
+        if (cancelled) return@withContext null
+        val target = absoluteDnsName(name) ?: return@withContext null
+        val question = try {
+            Record.newRecord(target, type, DClass.IN)
+        } catch (e: Exception) {
+            return@withContext null
+        }
+        val query = Message.newQuery(question)
+
         val start = cursor.getAndIncrement()
         for (i in pool.indices) {
             if (cancelled) return@withContext null
             val resolver = pool[(start + i) % pool.size]
-            val raw = exchange(resolver, packet, id) ?: continue
-            val response = try {
-                DnsCodec.parseResponse(raw)
-            } catch (e: Exception) {
-                null
-            } ?: continue
-            if (response.id != id) continue
-            if (response.truncated) {
-                val tcp = exchangeTcp(resolver, packet)
-                if (tcp == null) return@withContext response
-                try {
-                    val full = DnsCodec.parseResponse(tcp)
-                    if (full.id == id) full else response
+            var attempt = 0
+            while (attempt <= retries) {
+                attempt++
+                val message = try {
+                    resolver.send(query)
                 } catch (e: Exception) {
-                    response
+                    null
                 }
-            } else {
-                response
+                if (message != null) return@withContext toResponse(message, target)
+                if (cancelled) return@withContext null
             }
-            return@withContext response
         }
         null
     }
@@ -69,61 +81,70 @@ class DnsClient(
         return out
     }
 
-    private fun exchange(resolver: String, packet: ByteArray, id: Int): ByteArray? {
-        var attempt = 0
-        while (attempt <= retries) {
-            attempt++
+    private fun buildPool(resolvers: List<String>): List<SimpleResolver> {
+        val addresses = resolvers.filter { it.isNotBlank() }.ifEmpty { listOf("1.1.1.1") }
+        val out = addresses.mapNotNull { address ->
             try {
-                DatagramSocket().use { socket ->
-                    socket.soTimeout = timeoutMs
-                    val address = InetAddress.getByName(resolver)
-                    socket.send(DatagramPacket(packet, packet.size, address, 53))
-                    val buffer = ByteArray(4096)
-                    repeat(4) {
-                        val response = DatagramPacket(buffer, buffer.size)
-                        socket.receive(response)
-                        val raw = buffer.copyOf(response.length)
-                        if (raw.size >= 2 && ((raw[0].toInt() and 0xFF) shl 8 or (raw[1].toInt() and 0xFF)) == id) {
-                            return raw
-                        }
-                    }
-                    return null
+                SimpleResolver(address).apply {
+                    setTimeout(Duration.ofMillis(timeoutMs.toLong()))
                 }
             } catch (e: Exception) {
-                if (attempt > retries) return null
+                null
             }
         }
-        return null
+        if (out.isNotEmpty()) return out
+        return try {
+            listOf(SimpleResolver().apply { setTimeout(Duration.ofMillis(timeoutMs.toLong())) })
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
-    /** some resolvers recortan la respuesta en UDP: ahi se repite por TCP. */
-    private fun exchangeTcp(resolver: String, packet: ByteArray): ByteArray? = try {
-        Socket().use { socket ->
-            socket.connect(InetSocketAddress(resolver, 53), timeoutMs)
-            socket.soTimeout = timeoutMs
-            val out = socket.getOutputStream()
-            out.write((packet.size shr 8) and 0xFF)
-            out.write(packet.size and 0xFF)
-            out.write(packet)
-            out.flush()
-            val input = socket.getInputStream()
-            val head = readFully(input, 2) ?: return@use null
-            val length = ((head[0].toInt() and 0xFF) shl 8) or (head[1].toInt() and 0xFF)
-            readFully(input, length)
-        }
-    } catch (e: Exception) {
-        null
+    private fun toResponse(message: Message, question: Name): DnsResponse {
+        val header = message.header
+        val type = message.question?.type ?: Type.A
+        return DnsResponse(
+            id = header.getID(),
+            rcode = header.getRcode(),
+            truncated = header.getFlag(Flags.TC.toInt()),
+            authoritative = header.getFlag(Flags.AA.toInt()),
+            questions = listOf(DnsQuestion(question.toString(true), type)),
+            answers = message.getSection(Section.ANSWER).map { toRecord(it) },
+            authorities = message.getSection(Section.AUTHORITY).map { toRecord(it) },
+            additionals = message.getSection(Section.ADDITIONAL)
+                .filter { it.type != Type.OPT }
+                .map { toRecord(it) }
+        )
     }
 
-    private fun readFully(stream: InputStream, count: Int): ByteArray? {
-        if (count <= 0 || count > 65535) return null
-        val buffer = ByteArray(count)
-        var read = 0
-        while (read < count) {
-            val n = stream.read(buffer, read, count - read)
-            if (n < 0) return null
-            read += n
+    private fun toRecord(record: Record): DnsRecord {
+        val name = record.name.toString(true)
+        val ttl = record.ttl.toInt()
+        val data: RData = when (record) {
+            is ARecord -> RData.Address(record.address.hostAddress ?: "")
+            is AAAARecord -> RData.Address(formatIpv6(record.address.address))
+            is CNAMERecord -> RData.Name(record.target.toString(true))
+            is NSRecord -> RData.Name(record.target.toString(true))
+            is PTRRecord -> RData.Name(record.target.toString(true))
+            is MXRecord -> RData.Mail(record.priority, record.target.toString(true))
+            is TXTRecord -> RData.Text(record.strings.joinToString(" "))
+            is SOARecord -> RData.Zone(
+                primary = record.host.toString(true),
+                mailbox = record.admin.toString(true),
+                serial = record.serial,
+                refresh = record.refresh,
+                retry = record.retry,
+                expire = record.expire,
+                minimum = record.minimum
+            )
+            is SRVRecord -> RData.Service(
+                record.priority,
+                record.weight,
+                record.port,
+                record.target.toString(true)
+            )
+            else -> RData.Blob(record.toString())
         }
-        return buffer
+        return DnsRecord(name, record.type, ttl, data)
     }
 }

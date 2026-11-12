@@ -96,9 +96,23 @@ data class DnsRecordInfo(
 )
 
 @Serializable
+data class OpenPortInfo(
+    val port: Int,
+    val service: String = ""
+)
+
+/** De donde salio el subdominio: no siempre es el diccionario de fuerza bruta. */
+object SubdomainOrigin {
+    const val BRUTE_FORCE = "fuerza bruta"
+    const val ZONE_TRANSFER = "transferencia de zona"
+    const val CERTIFICATE = "certificado"
+}
+
+@Serializable
 data class SubdomainResult(
     val host: String,
     val domain: String = "",
+    val origin: String = SubdomainOrigin.BRUTE_FORCE,
     val addresses: List<String> = emptyList(),
     val ipv6: List<String> = emptyList(),
     val cname: String = "",
@@ -106,6 +120,16 @@ data class SubdomainResult(
     val httpStatus: Int = 0,
     val httpTitle: String = "",
     val reverseName: String = "",
+    val directStatus: Int = 0,
+    val sniStatus: Int = 0,
+    val sniOk: Boolean = false,
+    val sniRequired: Boolean = false,
+    val payloadStatus: Int = 0,
+    val payloadOk: Boolean = false,
+    val certSubject: String = "",
+    val certIssuer: String = "",
+    val certDaysLeft: Int = -1,
+    val openPorts: List<OpenPortInfo> = emptyList(),
     val firstSeen: Long = 0
 ) {
     val primaryAddress: String get() = addresses.firstOrNull() ?: ipv6.firstOrNull() ?: ""
