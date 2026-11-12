@@ -60,6 +60,7 @@ object SubdomainRepository {
     private var engine: SubdomainEngine? = null
     private var job: Job? = null
     private var store: SubdomainStore? = null
+    private val index = LinkedHashMap<String, SubdomainResult>()
 
     fun init(context: Context) {
         store = SubdomainStore(context.applicationContext)
@@ -90,6 +91,7 @@ object SubdomainRepository {
         }
 
         _results.value = emptyList()
+        index.clear()
         _progress.value = SubdomainProgress(
             running = true,
             domain = domain,
@@ -153,17 +155,13 @@ object SubdomainRepository {
 
     fun clear() {
         _results.value = emptyList()
+        index.clear()
         _progress.value = SubdomainProgress()
     }
 
     private fun upsert(result: SubdomainResult) {
-        val current = _results.value
-        val index = current.indexOfFirst { it.host == result.host }
-        _results.value = if (index >= 0) {
-            current.toMutableList().also { it[index] = result }
-        } else {
-            current + result
-        }
+        index[result.host] = result
+        _results.value = index.values.toList()
     }
 
     fun exportText(): String {

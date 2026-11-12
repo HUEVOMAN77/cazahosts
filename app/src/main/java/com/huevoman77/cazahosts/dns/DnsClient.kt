@@ -23,32 +23,40 @@ class DnsClient(
 
     private val cursor = AtomicInteger(0)
 
+    @Volatile
+    var cancelled = false
+
     private val pool: List<String> = resolvers.filter { it.isNotBlank() }.ifEmpty { listOf("1.1.1.1") }
 
     suspend fun query(name: String, type: Int): DnsResponse? = withContext(Dispatchers.IO) {
         val id = (Math.random() * 0xFFFF).toInt() and 0xFFFF
         val packet = DnsCodec.buildQuery(id, name, type)
-        val resolver = pool[cursor.getAndIncrement() % pool.size]
-        val raw = exchange(resolver, packet)
-        if (raw == null) return@withContext null
-        val response = try {
-            DnsCodec.parseResponse(raw)
-        } catch (e: Exception) {
-            null
-        } ?: return@withContext null
-        if (response.id != id) return@withContext null
-        if (response.truncated) {
-            val tcp = exchangeTcp(resolver, packet)
-            if (tcp == null) return@withContext response
-            try {
-                val full = DnsCodec.parseResponse(tcp)
-                if (full.id == id) full else response
+        val start = cursor.getAndIncrement()
+        for (i in pool.indices) {
+            if (cancelled) return@withContext null
+            val resolver = pool[(start + i) % pool.size]
+            val raw = exchange(resolver, packet, id) ?: continue
+            val response = try {
+                DnsCodec.parseResponse(raw)
             } catch (e: Exception) {
+                null
+            } ?: continue
+            if (response.id != id) continue
+            if (response.truncated) {
+                val tcp = exchangeTcp(resolver, packet)
+                if (tcp == null) return@withContext response
+                try {
+                    val full = DnsCodec.parseResponse(tcp)
+                    if (full.id == id) full else response
+                } catch (e: Exception) {
+                    response
+                }
+            } else {
                 response
             }
-        } else {
-            response
+            return@withContext response
         }
+        null
     }
 
     /** Consulta en paralelo varios tipos sobre el mismo nombre. */
@@ -61,7 +69,7 @@ class DnsClient(
         return out
     }
 
-    private fun exchange(resolver: String, packet: ByteArray): ByteArray? {
+    private fun exchange(resolver: String, packet: ByteArray, id: Int): ByteArray? {
         var attempt = 0
         while (attempt <= retries) {
             attempt++
@@ -71,9 +79,15 @@ class DnsClient(
                     val address = InetAddress.getByName(resolver)
                     socket.send(DatagramPacket(packet, packet.size, address, 53))
                     val buffer = ByteArray(4096)
-                    val response = DatagramPacket(buffer, buffer.size)
-                    socket.receive(response)
-                    return buffer.copyOf(response.length)
+                    repeat(4) {
+                        val response = DatagramPacket(buffer, buffer.size)
+                        socket.receive(response)
+                        val raw = buffer.copyOf(response.length)
+                        if (raw.size >= 2 && ((raw[0].toInt() and 0xFF) shl 8 or (raw[1].toInt() and 0xFF)) == id) {
+                            return raw
+                        }
+                    }
+                    return null
                 }
             } catch (e: Exception) {
                 if (attempt > retries) return null

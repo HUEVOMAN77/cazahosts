@@ -42,6 +42,10 @@ class SubdomainEngine(private val config: SubdomainConfig) {
 
     @Volatile
     var cancelled = false
+        set(value) {
+            field = value
+            client.cancelled = value
+        }
 
     private val client = DnsClient(config.resolvers, config.timeoutMs, config.retries)
 
@@ -125,21 +129,27 @@ class SubdomainEngine(private val config: SubdomainConfig) {
 
     /**
      * Muchos dominios responden a cualquier nombre. Se prueban tres etiquetas
-     * aleatorias: si todas resuelven, el dominio usa comodin y sus direcciones
-     * se pueden descartar de los resultados.
+     * aleatorias: si las tres resuelven al mismo conjunto de direcciones, el
+     * dominio usa comodín y esas direcciones se pueden descartar de los
+     * resultados. Si alguna de las tres no resuelve, no se descarta nada.
      */
     private suspend fun detectWildcard(domain: String): Set<String> {
-        val ips = LinkedHashSet<String>()
+        val samples = mutableListOf<Set<String>>()
         repeat(3) {
             val label = randomLabel()
-            val res = client.query("$label.$domain", DnsType.A) ?: return@repeat
-            if (!res.success) return@repeat
+            val res = client.query("$label.$domain", DnsType.A) ?: return emptySet()
+            if (!res.success) return emptySet()
+            val ips = LinkedHashSet<String>()
             for (rec in res.answers) {
                 val data = rec.data
                 if (data is RData.Address) ips.add(data.ip)
             }
+            if (ips.isEmpty()) return emptySet()
+            samples.add(ips)
         }
-        return ips
+        val first = samples.first()
+        if (samples.all { it == first }) return first
+        return emptySet()
     }
 
     private suspend fun resolve(host: String): SubdomainResult? {
