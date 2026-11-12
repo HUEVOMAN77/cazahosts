@@ -9,6 +9,19 @@ val keystoreBase64 = providers.environmentVariable("KS_BASE64").orNull
 val keystorePassword = providers.environmentVariable("KS_PASS").orNull
 val keystoreAlias = providers.environmentVariable("KS_ALIAS").orNull ?: "cazahosts"
 
+val releaseRefType = providers.environmentVariable("GITHUB_REF_TYPE").orNull
+val releaseTag = providers.environmentVariable("GITHUB_REF_NAME").orNull
+val semanticVersion = releaseTag
+    ?.takeIf { releaseRefType == "tag" }
+    ?.removePrefix("v")
+    ?.takeIf { it.matches(Regex("""\d+\.\d+\.\d+""")) }
+val releaseVersionCode = semanticVersion
+    ?.split(".")
+    ?.map { it.toInt() }
+    ?.let { (major, minor, patch) -> major * 10000 + minor * 100 + patch }
+    ?: 4
+val releaseVersionName = semanticVersion ?: "1.1.0"
+
 android {
     namespace = "com.huevoman77.cazahosts"
     compileSdk = 35
@@ -17,8 +30,8 @@ android {
         applicationId = "com.huevoman77.cazahosts"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.1.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         vectorDrawables.useSupportLibrary = true
     }
 
