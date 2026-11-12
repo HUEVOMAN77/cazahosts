@@ -1,4 +1,4 @@
-## CazaHosts 1.1.0
+## Novedades de esta versión
 
 Escanear tu red, encontrarte con todos sus subdominios y saber qué está expuesto de verdad.
 
