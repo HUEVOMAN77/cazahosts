@@ -32,6 +32,8 @@ Escanear tu red, encontrarte con todos sus subdominios y saber qué está expues
 
 - Las reglas de auditoría que dependían solo del puerto o del servicio ya se evalúan bien (Docker API, Redis, MongoDB y compañía).
 - El verificador de vivos ya no promete que siga revisando con la app cerrada.
+- El motor DNS prueba el siguiente servidor cuando uno no contesta y descarta las respuestas que no corresponden a la consulta.
+- El DNS comodín sólo se descarta cuando las tres muestras aleatorias dan la misma dirección, así no se pierden hosts reales.
 
 ### Detalles técnicos
 
