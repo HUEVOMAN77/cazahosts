@@ -13,30 +13,7 @@ object ScannerState {
     private val _target = MutableStateFlow("")
     val target: StateFlow<String> = _target
 
-    private val _scanRequest = MutableStateFlow(0L)
-    val scanRequest: StateFlow<Long> = _scanRequest
-
-    private var handled = 0L
-
     fun setTarget(text: String) {
         _target.value = text
-    }
-
-    /** Pide un escaneo inmediato del objetivo actual. */
-    fun requestScan() {
-        _scanRequest.value = System.currentTimeMillis()
-    }
-
-    /**
-     * Devuelve la peticion de escaneo pendiente y la marca como atendida, para
-     * que solo la primera pantalla que aparece la ejecute.
-     */
-    fun claimScanRequest(): Long {
-        val request = _scanRequest.value
-        if (request != handled) {
-            handled = request
-            return request
-        }
-        return 0L
     }
 }

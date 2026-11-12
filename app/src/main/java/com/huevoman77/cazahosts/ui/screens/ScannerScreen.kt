@@ -79,7 +79,6 @@ fun ScannerScreen(settings: AppSettings) {
     val paused by ScanRepository.paused.collectAsState()
     val hosts by ScanRepository.hosts.collectAsState()
     val target by ScannerState.target.collectAsState()
-    val scanRequest by ScannerState.scanRequest.collectAsState()
 
     var mode by remember { mutableStateOf(ScanMode.HOSTS_PORTS) }
     var portPreset by remember { mutableStateOf(prefs.portPreset) }
@@ -121,10 +120,6 @@ fun ScannerScreen(settings: AppSettings) {
     LaunchedEffect(target) {
         delay(700)
         settings.update { if (it.lastTarget == target) it else it.copy(lastTarget = target) }
-    }
-
-    LaunchedEffect(scanRequest) {
-        if (ScannerState.claimScanRequest() > 0) launchScan()
     }
 
     LazyColumn(
