@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -213,7 +214,7 @@ fun SessionDetailScreen(sessionId: String, onBack: () -> Unit) {
                     modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 6.dp)
                 )
             }
-            items(session.hosts, key = { it.ip }) { host ->
+            itemsIndexed(session.hosts, key = { index, host -> "$index-${host.ip}" }) { _, host ->
                 SectionCard(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     accent = when {

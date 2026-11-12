@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -175,7 +176,7 @@ fun CheckerScreen(settings: AppSettings) {
                     modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 8.dp)
                 )
             }
-            items(watched, key = { it.ip }) { host ->
+            itemsIndexed(watched, key = { index, host -> "$index-${host.ip}" }) { _, host ->
                 WatchedCard(
                     host = host,
                     onClick = {},

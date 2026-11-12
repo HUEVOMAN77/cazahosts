@@ -16,6 +16,17 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 /**
+ * Ips que hay que agregar a la lista de vigilados: descarta las vacias, las que
+ * ya estaban y las que vienen repetidas. Sin quitar las repetidas, dos
+ * subdominios que resuelven a la misma IP dejan la lista con claves iguales y
+ * la app se cae al desplazarla.
+ */
+internal fun ipsParaVigilar(actuales: List<String>, nuevas: List<String>): List<String> {
+    val conocidas = actuales.map { it.trim() }.toSet()
+    return nuevas.map { it.trim() }.filter { it.isNotEmpty() && it !in conocidas }.distinct()
+}
+
+/**
  * Lista de equipos vigilados. Se guarda en disco para que no se pierda al
  * cerrar la app, y la revision periodica vive en un ambito de aplicacion para
  * que siga corriendo aunque se cambie de pestana.
@@ -52,7 +63,7 @@ object CheckerStore {
             return
         }
         _watched.value = try {
-            json.decodeFromString<List<WatchedHost>>(raw)
+            json.decodeFromString<List<WatchedHost>>(raw).distinctBy { it.ip }
         } catch (e: Exception) {
             emptyList()
         }
@@ -72,8 +83,7 @@ object CheckerStore {
     }
 
     fun addAll(ips: List<String>) {
-        val known = _watched.value.map { it.ip }.toSet()
-        val fresh = ips.map { it.trim() }.filter { it.isNotEmpty() && it !in known }
+        val fresh = ipsParaVigilar(_watched.value.map { it.ip }, ips)
         if (fresh.isEmpty()) return
         _watched.value = _watched.value + fresh.map { WatchedHost(ip = it) }
         persist()
