@@ -1,44 +1,37 @@
 ## Novedades de esta versión
 
-Escanear tu red, encontrarte con todos sus subdominios y saber qué está expuesto de verdad.
+El buscador de subdominios deja de ser solo eso: ahora dice cuáles sirven de verdad.
 
-### Motor de fuerza bruta DNS
+### Motor DNS sobre dnsjava
 
-- Motor DNS propio: arma las consultas a nivel de protocolo (UDP y TCP) sin depender de librerías externas.
-- Fuerza bruta de subdominios con diccionario rápido, medio o completo, más tu propia lista de palabras.
-- Patrones automáticos: `dev-web`, `api-prod`, `1` a `999`, combinaciones de dos niveles.
-- Tipos de registro: A, AAAA, CNAME, NS, MX, TXT, SOA y SRV.
-- Detección de DNS comodín: prueba nombres aleatorios y descarta los que resuelven siempre igual.
-- Seguimiento de CNAME para saber a qué apunta realmente cada subdominio.
-- Resolución con rotación de servidores DNS, reintentos y paso a TCP cuando el servidor recorta la respuesta.
-- Enriquecimiento: título de la página web, código HTTP, IPv6 y nombre inverso (PTR).
+- El motor de consultas pasa a **dnsjava 3.7.1**, la última versión publicada: todos los tipos de registro, EDNS, DNSSEC y transferencias de zona AXFR.
+- Las consultas se arman con nombres absolutos y resuelven con rotación de servidores, reintentos y paso a TCP cuando el servidor recorta la respuesta.
+- Transferencia de zona (AXFR) contra los servidores de nombres del dominio: si el servidor publica la zona completa, se listan todos sus registros de una sola vez.
 
-### Motor de escaneo mejorado
+### Más lugares donde buscar nombres
 
-- Chequeos UDP: SNMP con comunidad pública, DNS recursivo abierto, NTP y SSDP/UPnP.
-- Pausar y reanudar un escaneo a mitad de camino.
-- Doble clic en cualquier servicio para ver el titular del certificado TLS.
-- Objetivo que ya no se pierde al cambiar de pestaña ni al cerrar la app.
+- **Certificados públicos**: los nombres que aparecen en los certificados emitidos (Cert Spotter y, de respaldo, crt.sh) se agregan a los del diccionario.
+- Se marca el origen de cada subdominio: fuerza bruta, transferencia de zona o certificado.
+
+### Qué responde cada subdominio
+
+- **HTTP 200** cuando el sitio responde con éxito, y el código exacto cuando responde otra cosa (301, 302, 403, 405...).
+- **HTTP directo**: qué contesta la IP cuando no se le pide SNI.
+- **Con SNI**: si el TLS acepta el nombre y si el certificado lo cubre de verdad.
+- **Solo con SNI**: aviso cuando el certificado que se presenta sin SNI es distinto del que corresponde al nombre.
+- **Payload**: si el servidor acepta una carga útil (2xx o 3xx) o la rechaza (405).
+- **Puertos abiertos** de cada subdominio, con el nombre del servicio.
+- **Certificado**: emisor, titular y días que le quedan para vencer.
 
 ### Interfaz
 
-- Pantalla nueva de DNS con filtros por web, CNAME e IPv6, y buscador.
-- Envío directo de los subdominios encontrados al escanear y al verificador de vivos.
-- Detalle de cada escaneo guardado, con exportación a CSV y JSON.
-- Pantalla principal con la información de tu red: IP, puerta de enlace, servidor DNS y subred local.
-- Verificador de vivos que ahora sí revisa solo mientras la app está abierta.
-
-### Correcciones
-
-- Las reglas de auditoría que dependían solo del puerto o del servicio ya se evalúan bien (Docker API, Redis, MongoDB y compañía).
-- El verificador de vivos ya no promete que siga revisando con la app cerrada.
-- El motor DNS prueba el siguiente servidor cuando uno no contesta y descarta las respuestas que no corresponden a la consulta.
-- El DNS comodín sólo se descarta cuando las tres muestras aleatorias dan la misma dirección, así no se pierden hosts reales.
-- La lectura del SNMP ya toma el código de error en el lugar correcto y muestra la descripción real del equipo.
-- El aviso del puerto 53 ya no afirma que hay un recursor abierto cuando sólo es el reenviador del router.
+- Filtros por subdominio con web, HTTP 200, SNI, payload, CNAME, IPv6 y puertos abiertos.
+- El certificado vencido o por vencer se marca en ámbar y en rojo.
+- La exportación de texto incluye estado HTTP, SNI, payload, puertos y certificado.
 
 ### Detalles técnicos
 
 - Compilado con Kotlin 2.0.21, Jetpack Compose (BOM 2024.12.01), Material 3 y coroutines.
+- dnsjava 3.7.1, OkHttp 4.12.0 y SLF4J.
 - Requiere Android 8.0 (API 26) o superior.
-- 36 pruebas unitarias en verde: parser DNS, SNMP, base de datos de vulnerabilidades, generadores, huellas de servicio y utilidades de IP.
+- 58 pruebas unitarias en verde, 9 de ellas de comprobación en vivo contra Internet que se activan a mano.
