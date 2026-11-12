@@ -17,8 +17,8 @@ android {
         applicationId = "com.huevoman77.cazahosts"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.1.0"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -93,4 +93,6 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    testImplementation("junit:junit:4.13.2")
 }

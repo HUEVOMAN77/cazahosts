@@ -303,6 +303,13 @@ object VulnDb {
                     matched = lessThan(version, rule.affectedBelow)
                 }
             }
+            if (!matched && rule.versionRegex.isNotEmpty() && rule.affectedBelow.isEmpty()) {
+                matched = Regex(rule.versionRegex, RegexOption.IGNORE_CASE).containsMatchIn(haystack)
+            }
+            // una regla que solo declara puerto o servicio ya coincide por si sola
+            if (!matched && rule.bannerContains.isEmpty() && rule.versionRegex.isEmpty()) {
+                matched = true
+            }
             if (!matched) continue
 
             if (rule.id == "version-disclosure") {

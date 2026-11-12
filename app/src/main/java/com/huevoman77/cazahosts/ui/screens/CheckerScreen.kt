@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,9 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.huevoman77.cazahosts.check.AliveChecker
+import com.huevoman77.cazahosts.data.AppSettings
 import com.huevoman77.cazahosts.data.CheckerStore
 import com.huevoman77.cazahosts.data.ScanRepository
 import com.huevoman77.cazahosts.ui.components.EmptyState
@@ -41,51 +39,25 @@ import com.huevoman77.cazahosts.ui.components.SecondaryButton
 import com.huevoman77.cazahosts.ui.components.SectionCard
 import com.huevoman77.cazahosts.ui.components.SliderRow
 import com.huevoman77.cazahosts.ui.components.WatchedCard
-import com.huevoman77.cazahosts.util.Notifier
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun CheckerScreen() {
-    val context = LocalContext.current
+fun CheckerScreen(settings: AppSettings) {
     val scope = rememberCoroutineScope()
+    val prefs by settings.state.collectAsState()
     val watched by CheckerStore.watched.collectAsState()
+    val autoCheck by CheckerStore.autoCheck.collectAsState()
     val hosts by ScanRepository.hosts.collectAsState()
     var input by remember { mutableStateOf("") }
-    var autoCheck by remember { mutableStateOf(false) }
-    var interval by remember { mutableStateOf(60f) }
+    var interval by remember { mutableStateOf(prefs.checkIntervalSec.toFloat()) }
     var checking by remember { mutableStateOf(false) }
-    val checker = remember { AliveChecker() }
 
     fun runCheck() {
         if (watched.isEmpty() || checking) return
         checking = true
         scope.launch {
-            val results = checker.check(watched) { updated ->
-                val before = CheckerStore.watched.value.firstOrNull { it.ip == updated.ip }
-                CheckerStore.update(updated)
-                if (before != null && before.alive != updated.alive) {
-                    Notifier.stateChanged(context, updated.ip, updated.alive)
-                }
-            }
-            results.forEach { CheckerStore.update(it) }
+            CheckerStore.runOnce()
             checking = false
-        }
-    }
-
-    LaunchedEffect(autoCheck, interval) {
-        while (autoCheck) {
-            delay((interval * 1000L).toLong())
-            if (watched.isNotEmpty() && !checking) {
-                val results = checker.check(watched)
-                results.forEach { updated ->
-                    val before = CheckerStore.watched.value.firstOrNull { it.ip == updated.ip }
-                    CheckerStore.update(updated)
-                    if (before != null && before.alive != updated.alive) {
-                        Notifier.stateChanged(context, updated.ip, updated.alive)
-                    }
-                }
-            }
         }
     }
 
@@ -157,10 +129,12 @@ fun CheckerScreen() {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 LabeledSwitch(
-                    title = "Revisar automáticamente",
-                    subtitle = "Sigue activo aunque cierres la app",
+                    title = "Revisar automaticamente",
+                    subtitle = "Sigue revisando mientras la app permanezca abierta",
                     checked = autoCheck,
-                    onChange = { autoCheck = it }
+                    onChange = { enabled ->
+                        CheckerStore.setAutoCheck(enabled, interval.toInt())
+                    }
                 )
                 SliderRow(
                     title = "Intervalo",
@@ -168,7 +142,11 @@ fun CheckerScreen() {
                     value = interval,
                     range = 15f..600f,
                     steps = 0
-                ) { interval = it }
+                ) { value ->
+                    interval = value
+                    settings.update { it.copy(checkIntervalSec = value.toInt()) }
+                    if (autoCheck) CheckerStore.setAutoCheck(true, value.toInt())
+                }
                 Spacer(Modifier.height(6.dp))
                 PrimaryButton(
                     text = if (checking) "Comprobando..." else "Comprobar ahora",

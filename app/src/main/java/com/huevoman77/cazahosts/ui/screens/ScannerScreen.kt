@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Stop
@@ -36,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +53,7 @@ import com.huevoman77.cazahosts.core.Net
 import com.huevoman77.cazahosts.data.AppSettings
 import com.huevoman77.cazahosts.data.HostResult
 import com.huevoman77.cazahosts.data.ScanRepository
+import com.huevoman77.cazahosts.data.ScannerState
 import com.huevoman77.cazahosts.scan.Fingerprint
 import com.huevoman77.cazahosts.scan.ScanConfig
 import com.huevoman77.cazahosts.scan.ScanMode
@@ -66,15 +69,18 @@ import com.huevoman77.cazahosts.ui.components.SliderRow
 import com.huevoman77.cazahosts.ui.components.StatTile
 import com.huevoman77.cazahosts.ui.theme.Coral
 import com.huevoman77.cazahosts.ui.theme.Mint
+import kotlinx.coroutines.delay
 
 @Composable
 fun ScannerScreen(settings: AppSettings) {
     val context = LocalContext.current
     val prefs by settings.state.collectAsState()
     val progress by ScanRepository.progress.collectAsState()
+    val paused by ScanRepository.paused.collectAsState()
     val hosts by ScanRepository.hosts.collectAsState()
+    val target by ScannerState.target.collectAsState()
+    val scanRequest by ScannerState.scanRequest.collectAsState()
 
-    var target by remember { mutableStateOf("") }
     var mode by remember { mutableStateOf(ScanMode.HOSTS_PORTS) }
     var portPreset by remember { mutableStateOf(prefs.portPreset) }
     var customPorts by remember { mutableStateOf("") }
@@ -86,6 +92,40 @@ fun ScannerScreen(settings: AppSettings) {
 
     val running = progress.running
     val localSubnet = remember { Net.localSubnet(context) }
+
+    fun launchScan() {
+        ScanRepository.start(
+            ScanConfig(
+                targets = target,
+                mode = mode,
+                portPreset = portPreset,
+                customPorts = customPorts,
+                concurrency = concurrency.toInt(),
+                timeoutMs = timeout.toInt(),
+                grabBanner = prefs.grabBanner,
+                activeChecks = prefs.activeChecks,
+                useArp = prefs.useArp,
+                reverseDns = prefs.reverseDns,
+                udpChecks = prefs.udpChecks
+            )
+        )
+    }
+
+    // el objetivo vive fuera de la pantalla: no se pierde al cambiar de pestana
+    LaunchedEffect(Unit) {
+        if (ScannerState.target.value.isEmpty() && prefs.lastTarget.isNotEmpty()) {
+            ScannerState.setTarget(prefs.lastTarget)
+        }
+    }
+
+    LaunchedEffect(target) {
+        delay(700)
+        settings.update { if (it.lastTarget == target) it else it.copy(lastTarget = target) }
+    }
+
+    LaunchedEffect(scanRequest) {
+        if (ScannerState.claimScanRequest() > 0) launchScan()
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -114,7 +154,7 @@ fun ScannerScreen(settings: AppSettings) {
             ) {
                 OutlinedTextField(
                     value = target,
-                    onValueChange = { target = it },
+                    onValueChange = { ScannerState.setTarget(it) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     placeholder = { Text("192.168.1.0/24  o  10.0.0.1-254  o  10.0.0.*") },
@@ -127,23 +167,23 @@ fun ScannerScreen(settings: AppSettings) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
-                        selected = target == localSubnet && localSubnet != null,
-                        onClick = { localSubnet?.let { target = it } },
+                        selected = target == localSubnet,
+                        onClick = { localSubnet?.let { ScannerState.setTarget(it) } },
                         label = { Text(localSubnet ?: "Mi red") }
                     )
                     FilterChip(
                         selected = false,
-                        onClick = { target = "10.0.0.1-254" },
+                        onClick = { ScannerState.setTarget("10.0.0.1-254") },
                         label = { Text("Rango") }
                     )
                     FilterChip(
                         selected = false,
-                        onClick = { target = "192.168.0.0/16" },
+                        onClick = { ScannerState.setTarget("192.168.0.0/16") },
                         label = { Text("/16 completo") }
                     )
                     FilterChip(
                         selected = false,
-                        onClick = { target = "" },
+                        onClick = { ScannerState.setTarget("") },
                         label = { Text("Limpiar") }
                     )
                 }
@@ -269,6 +309,12 @@ fun ScannerScreen(settings: AppSettings) {
                     checked = prefs.reverseDns,
                     onChange = { value -> settings.update { it.copy(reverseDns = value) } }
                 )
+                LabeledSwitch(
+                    title = "Servicios UDP",
+                    subtitle = "SNMP, DNS, NTP y UPnP que solo contestan por UDP",
+                    checked = prefs.udpChecks,
+                    onChange = { value -> settings.update { it.copy(udpChecks = value) } }
+                )
             }
         }
 
@@ -281,6 +327,14 @@ fun ScannerScreen(settings: AppSettings) {
             ) {
                 if (running) {
                     SecondaryButton(
+                        text = if (paused) "Reanudar" else "Pausar",
+                        icon = if (paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                        onClick = {
+                            if (paused) ScanRepository.resume() else ScanRepository.pause()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    SecondaryButton(
                         text = "Detener",
                         icon = Icons.Outlined.Stop,
                         onClick = { ScanRepository.stop() },
@@ -290,22 +344,7 @@ fun ScannerScreen(settings: AppSettings) {
                     PrimaryButton(
                         text = "Iniciar escaneo",
                         icon = Icons.Outlined.PlayArrow,
-                        onClick = {
-                            ScanRepository.start(
-                                ScanConfig(
-                                    targets = target,
-                                    mode = mode,
-                                    portPreset = portPreset,
-                                    customPorts = customPorts,
-                                    concurrency = concurrency.toInt(),
-                                    timeoutMs = timeout.toInt(),
-                                    grabBanner = prefs.grabBanner,
-                                    activeChecks = prefs.activeChecks,
-                                    useArp = prefs.useArp,
-                                    reverseDns = prefs.reverseDns
-                                )
-                            )
-                        },
+                        onClick = { launchScan() },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -474,6 +513,14 @@ fun HostDetailSheet(
                                 text = "Certificado: ${if (port.certDaysLeft >= 0) "${port.certDaysLeft} días restantes" else "vencido"}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (port.certDaysLeft < 30) Coral else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 56.dp)
+                            )
+                        }
+                        if (port.certSubject.isNotEmpty()) {
+                            Text(
+                                text = "Titular: ${port.certSubject}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(start = 56.dp)
                             )
                         }

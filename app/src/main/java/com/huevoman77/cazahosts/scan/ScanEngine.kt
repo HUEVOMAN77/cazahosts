@@ -44,6 +44,7 @@ data class ScanConfig(
     val activeChecks: Boolean = true,
     val useArp: Boolean = true,
     val reverseDns: Boolean = true,
+    val udpChecks: Boolean = true,
     val maxHosts: Long = 65536
 )
 
@@ -71,6 +72,7 @@ data class ScanSummary(
 class ScanEngine(private val config: ScanConfig) {
 
     private val cancelled = AtomicBoolean(false)
+    private val paused = AtomicBoolean(false)
     private val portsByHost = ConcurrentHashMap<String, MutableList<PortFinding>>()
     private val findingsByHost = ConcurrentHashMap<String, MutableList<VulnFinding>>()
     private val aliveHosts = Collections.synchronizedList(mutableListOf<HostResult>())
@@ -84,6 +86,23 @@ class ScanEngine(private val config: ScanConfig) {
     }
 
     fun isCancelled(): Boolean = cancelled.get()
+
+    fun pause() {
+        paused.set(true)
+    }
+
+    fun resume() {
+        paused.set(false)
+    }
+
+    fun isPaused(): Boolean = paused.get()
+
+    /** Espera a que se reanude el escaneo, salvo que se cancele. */
+    private suspend fun awaitResume() {
+        while (paused.get() && !cancelled.get()) {
+            delay(200)
+        }
+    }
 
     /**
      * Acepta rangos de IP y tambien nombres de host: "ejemplo.com" se resuelve
@@ -159,6 +178,8 @@ class ScanEngine(private val config: ScanConfig) {
             launch(Dispatchers.IO) {
                 for (ip in ipChannel) {
                     if (cancelled.get()) break
+                    awaitResume()
+                    if (cancelled.get()) break
                     currentIp.set(ip)
                     val host = probeHost(ip, arpTable)
                     scanned.incrementAndGet()
@@ -211,6 +232,8 @@ class ScanEngine(private val config: ScanConfig) {
                 launch(Dispatchers.IO) {
                     for ((ip, port) in tasks) {
                         if (cancelled.get()) break
+                        awaitResume()
+                        if (cancelled.get()) break
                         val finding = probePort(ip, port)
                         if (finding != null) {
                             portsByHost.getOrPut(ip) { Collections.synchronizedList(mutableListOf()) } += finding
@@ -221,6 +244,45 @@ class ScanEngine(private val config: ScanConfig) {
             }
             portWorkers.forEach { it.join() }
             job.join()
+
+            // -------------------------------------------- fase 2b: puertos UDP
+            if (config.udpChecks && !cancelled.get()) {
+                onProgress(
+                    ScanProgress(
+                        scanned = scanned.get(),
+                        total = totalHosts,
+                        alive = alive.get(),
+                        portsFound = portsFound.get(),
+                        phase = "Probando servicios UDP",
+                        running = true
+                    )
+                )
+                val udpTasks = Channel<Pair<String, Int>>(capacity = 4096)
+                val udpJob = launch(Dispatchers.IO) {
+                    for (host in aliveList) {
+                        for (port in UdpChecks.ports) udpTasks.send(host.ip to port)
+                    }
+                    udpTasks.close()
+                }
+                val udpWorkers = (1..config.concurrency.coerceIn(1, 64)).map {
+                    launch(Dispatchers.IO) {
+                        for ((ip, port) in udpTasks) {
+                            if (cancelled.get()) break
+                            awaitResume()
+                            if (cancelled.get()) break
+                            val result = UdpChecks.probe(ip, port, config.timeoutMs.coerceAtLeast(700)) ?: continue
+                            portsByHost.getOrPut(ip) { Collections.synchronizedList(mutableListOf()) } += result.port
+                            portsFound.incrementAndGet()
+                            if (result.findings.isNotEmpty()) {
+                                findingsByHost.getOrPut(ip) { Collections.synchronizedList(mutableListOf()) } += result.findings
+                                findingCount.addAndGet(result.findings.size)
+                            }
+                        }
+                    }
+                }
+                udpWorkers.forEach { it.join() }
+                udpJob.join()
+            }
 
             // ---------------------------------------------- fase 3: auditoría activa
             if (config.activeChecks && !cancelled.get()) {
@@ -327,6 +389,7 @@ class ScanEngine(private val config: ScanConfig) {
         var tlsVersion = ""
         var certExpiry = ""
         var certDays = -1
+        var certSubject = ""
         try {
             if (config.grabBanner) {
                 val tlsPorts = setOf(443, 8443, 465, 993, 995, 636, 6697, 5223, 9443, 4433)
@@ -338,6 +401,7 @@ class ScanEngine(private val config: ScanConfig) {
                         tlsVersion = info?.version ?: ""
                         certExpiry = info?.expiry ?: ""
                         certDays = info?.daysLeft ?: -1
+                        certSubject = info?.subject ?: ""
                         banner = readBanner(tlsSocket, port)
                         tlsSocket.close()
                     } else {
@@ -369,6 +433,7 @@ class ScanEngine(private val config: ScanConfig) {
             tlsVersion = tlsVersion,
             certExpiry = certExpiry,
             certDaysLeft = certDays,
+            certSubject = certSubject,
             httpStatus = httpStatus,
             httpTitle = title
         )
@@ -377,7 +442,7 @@ class ScanEngine(private val config: ScanConfig) {
             findingsByHost.getOrPut(ip) { Collections.synchronizedList(mutableListOf()) } += passive
         }
         if (tls && certDays >= -1) {
-            val tlsInfo = Checks.TlsInfo(tlsVersion, certExpiry, certDays, "")
+            val tlsInfo = Checks.TlsInfo(tlsVersion, certExpiry, certDays, certSubject)
             val tlsFindings = Checks.tlsFindings(tlsInfo, port)
             if (tlsFindings.isNotEmpty()) {
                 findingsByHost.getOrPut(ip) { Collections.synchronizedList(mutableListOf()) } += tlsFindings

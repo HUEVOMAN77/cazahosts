@@ -40,6 +40,7 @@ data class PortFinding(
     val tlsVersion: String = "",
     val certExpiry: String = "",
     val certDaysLeft: Int = -1,
+    val certSubject: String = "",
     val httpStatus: Int = 0,
     val httpTitle: String = "",
     val findings: List<VulnFinding> = emptyList()
@@ -85,4 +86,40 @@ data class WatchedHost(
     val history: List<Long> = emptyList(),
     val portsOpen: Int = 0,
     val mac: String = ""
+)
+
+@Serializable
+data class DnsRecordInfo(
+    val type: String,
+    val value: String,
+    val ttl: Int = 0
+)
+
+@Serializable
+data class SubdomainResult(
+    val host: String,
+    val domain: String = "",
+    val addresses: List<String> = emptyList(),
+    val ipv6: List<String> = emptyList(),
+    val cname: String = "",
+    val records: List<DnsRecordInfo> = emptyList(),
+    val httpStatus: Int = 0,
+    val httpTitle: String = "",
+    val reverseName: String = "",
+    val firstSeen: Long = 0
+) {
+    val primaryAddress: String get() = addresses.firstOrNull() ?: ipv6.firstOrNull() ?: ""
+}
+
+@Serializable
+data class SubdomainSession(
+    val id: String,
+    val domain: String,
+    val startedAt: Long,
+    val finishedAt: Long = 0,
+    val tested: Int = 0,
+    val found: Int = 0,
+    val discardedWildcard: Int = 0,
+    val resolvers: String = "",
+    val results: List<SubdomainResult> = emptyList()
 )

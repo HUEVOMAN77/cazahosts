@@ -1,9 +1,10 @@
 # CazaHosts
 
 Escáner de red nativo para Android. Descubre qué equipos están vivos en un rango, qué
-puertos tienen abiertos, qué versión de software corre en cada uno y qué riesgos
-verificables existen en ellos. Todo el análisis ocurre dentro del teléfono: la app no
-manda datos a ningún servidor y la base de vulnerabilidades viaja dentro del APK.
+puertos tienen abiertos, qué versión de software corre en cada uno, qué subdominios
+existen en un dominio y qué riesgos verificables existen en ellos. Todo el análisis ocurre
+dentro del teléfono: la app no manda datos a ningún servidor y la base de vulnerabilidades
+viaja dentro del APK.
 
 <img src="docs/icono.png" width="96" alt="Icono de CazaHosts">
 
@@ -13,12 +14,16 @@ manda datos a ningún servidor y la base de vulnerabilidades viaja dentro del AP
   listas de IP y detecta los equipos que responden. Hasta 65 536 direcciones por pasada.
 - **Escaneo de puertos**: con perfiles *Comunes*, *Expandido*, *1-65535* o una lista
   propia (`22,80,443,8000-8010`). Captura banners e identifica servicio y versión.
+- **Fuerza bruta DNS de subdominios**: motor DNS propio que arma las consultas a nivel
+  de protocolo (UDP y TCP), prueba diccionarios y patrones contra un dominio y devuelve
+  los nombres que existen de verdad.
 - **Base de vulnerabilidades**: correlaciona cada banner con CVEs conocidos (regreSSHion,
   vsftpd 2.3.4, ProFTPD mod_copy, Apache, nginx, Redis, Jenkins, Grafana, Docker API,
   Kubernetes API, y más) y con malas prácticas de exposición.
 - **Chequeos activos no destructivos**: FTP anónimo, Redis sin contraseña, MongoDB,
   Elasticsearch, Docker API, archivos sensibles (`.env`, `.git/config`, respaldos),
   paneles administrativos, cabeceras HTTP faltantes y certificados TLS vencidos.
+- **Chequeos UDP**: SNMP con comunidad pública, DNS recursivo abierto, NTP y SSDP/UPnP.
 - **Checker de disponibilidad**: vigila tus equipos y te avisa cuando uno cae o vuelve.
 - **Generadores**: contraseñas (incluido modo pronunciable), subdominios, rangos de IP,
   subredes, usuarios y diccionarios.
@@ -42,8 +47,30 @@ manda datos a ningún servidor y la base de vulnerabilidades viaja dentro del AP
 1. En **Escanear**, tocá *Mi red* para cargar el `/24` de tu Wi-Fi o escribí tu rango, una IP sola o el nombre de un host (`ejemplo.com`, que se resuelve por DNS).
 2. Elegí el modo: *Solo hosts*, *Hosts y puertos* o *Auditoría completa*.
 3. Ajustá hilos y tiempo de espera si tu red es lenta.
-4. Tocá **Iniciar escaneo**. Los resultados aparecen en vivo.
+4. Tocá **Iniciar escaneo**. Los resultados aparecen en vivo y podés pausar o reanudar.
 5. Revisá **Riesgos** para el detalle de cada hallazgo y la solución sugerida.
+
+## Fuerza bruta de subdominios
+
+En la pestaña **DNS** escribís el dominio (`ejemplo.com`) y el motor prueba nombres
+candidatos hasta encontrar los que resuelven.
+
+- **Diccionario**: rápido (150 nombres), medio o completo (~900 nombres), o tu propia
+  lista en formato texto, que se abre desde el teléfono.
+- **Patrones**: prefijos y sufijos (`dev-web`, `api-prod`), numeración (`api1` … `api999`)
+  y combinaciones de dos niveles.
+- **Tipos de registro**: A, AAAA, CNAME, NS, MX, TXT, SOA y SRV.
+- **DNS comodín**: antes de empezar el motor genera nombres aleatorios y descarta todo
+  lo que responda siempre igual, así no te llena la pantalla de falsos positivos.
+- **CNAME**: si el nombre apunta a otro host, se sigue la cadena para saber a dónde
+  termina realmente.
+- **Enriquecido**: cada subdominio trae su IPv4, su IPv6, el código y el título de la
+  página web y el nombre inverso (PTR) cuando existe.
+- **Salida**: podés copiar los resultados, compartirlos, mandarlos al escanear de puertos
+  o dejarlos vigilados en el checker de vivos.
+
+Los servidores DNS se eligen a mano (automático, el de tu red, 1.1.1.1, 8.8.8.8 o
+9.9.9.9) y el motor rota entre ellos y reintenta ante respuesta truncada.
 
 ## Compilar desde cero
 
@@ -56,12 +83,19 @@ cd cazahosts
 La llave de firma se toma de las variables de entorno `KS_BASE64` (llave en base64),
 `KS_PASS` y `KS_ALIAS`. Sin ellas, Gradle firma con la llave de depuración.
 
+Para correr las pruebas:
+
+```bash
+./gradlew testDebugUnitTest
+```
+
 ## Estructura
 
 ```
 app/src/main/java/com/huevoman77/cazahosts/
 ├── core/      utilidades de IP, sockets, tabla ARP y fabricantes (MAC)
 ├── data/      modelos, ajustes, guardado de resultados y repositorio de escaneo
+├── dns/       protocolo DNS, cliente, diccionario y motor de subdominios
 ├── scan/      motor de escaneo, captura de banners y fingerprinting de servicios
 ├── vuln/      base de reglas CVE y chequeos activos
 ├── creds/     auditoría de credenciales

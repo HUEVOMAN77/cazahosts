@@ -102,6 +102,43 @@ object Net {
         return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
     }
 
+    /** Servidores DNS que entrega el DHCP de la red Wi-Fi actual. */
+    fun dnsServers(context: Context): List<String> {
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val dhcp = wifi?.dhcpInfo ?: return emptyList()
+        return listOf(dhcp.dns1, dhcp.dns2)
+            .map { longToIp(it.toLong()) }
+            .filterNotNull()
+            .filter { it != "0.0.0.0" }
+            .distinct()
+    }
+
+    /** Puerta de enlace por defecto de la red actual. */
+    fun gateway(context: Context): String? {
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val dhcp = wifi?.dhcpInfo ?: return null
+        val ip = longToIp(dhcp.gateway.toLong()) ?: return null
+        return if (ip == "0.0.0.0") null else ip
+    }
+
+    /**
+     * Envia un datagrama UDP y espera la respuesta. Si el puerto esta cerrado,
+     * el sistema responde con ICMP y la espera termina en error.
+     */
+    fun udpProbe(ip: String, port: Int, payload: ByteArray, timeoutMs: Int): ByteArray? = try {
+        java.net.DatagramSocket().use { socket ->
+            socket.soTimeout = timeoutMs
+            val address = InetAddress.getByName(ip)
+            socket.send(java.net.DatagramPacket(payload, payload.size, address, port))
+            val buffer = ByteArray(4096)
+            val response = java.net.DatagramPacket(buffer, buffer.size)
+            socket.receive(response)
+            buffer.copyOf(response.length)
+        }
+    } catch (e: Exception) {
+        null
+    }
+
     private fun longToIp(value: Long): String? {
         val v = value and 0xFFFFFFFFL
         return "${(v shr 24) and 0xFF}.${(v shr 16) and 0xFF}.${(v shr 8) and 0xFF}.${v and 0xFF}"

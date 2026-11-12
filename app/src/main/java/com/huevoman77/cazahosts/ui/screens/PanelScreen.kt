@@ -1,5 +1,6 @@
 package com.huevoman77.cazahosts.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Dns
@@ -60,6 +62,8 @@ fun PanelScreen(
     settings: AppSettings,
     onOpenScanner: () -> Unit,
     onOpenFindings: () -> Unit,
+    onOpenSubdomains: () -> Unit = {},
+    onOpenSession: (String) -> Unit = {},
     onOpenSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -77,6 +81,10 @@ fun PanelScreen(
         .flatMap { host -> host.findings.map { host.ip to it } }
         .sortedByDescending { it.second.severityEnum.peso }
         .take(4)
+
+    val myIp = remember { Net.localIpv4(context) }
+    val gateway = remember { Net.gateway(context) }
+    val dnsServers = remember { Net.dnsServers(context) }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -191,6 +199,31 @@ fun PanelScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+                Spacer(Modifier.height(10.dp))
+                com.huevoman77.cazahosts.ui.components.SecondaryButton(
+                    text = "Fuerza bruta de subdominios",
+                    icon = Icons.Outlined.Dns,
+                    onClick = onOpenSubdomains,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        item {
+            SectionCard(
+                title = "Tu red ahora",
+                subtitle = "Como esta conectado este dispositivo",
+                icon = Icons.Outlined.Router,
+                accent = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                KeyValueRow(key = "IP del telefono", value = myIp ?: "sin conexion")
+                KeyValueRow(key = "Puerta de enlace", value = gateway ?: "sin datos")
+                KeyValueRow(key = "Servidor DNS", value = dnsServers.joinToString(", ").ifEmpty { "sin datos" })
+                KeyValueRow(
+                    key = "Red local",
+                    value = Net.localSubnet(context) ?: "sin datos"
+                )
             }
         }
 
@@ -271,19 +304,45 @@ fun PanelScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     val fmt = SimpleDateFormat("dd/MM HH:mm", Locale.US)
-                    sessions.take(6).forEachIndexed { index, session ->
+                    sessions.take(8).forEachIndexed { index, session ->
                         if (index > 0) Divider()
-                        KeyValueRow(
-                            key = fmt.format(Date(session.startedAt)),
-                            value = session.target.take(22),
-                            valueColor = MaterialTheme.colorScheme.onSurface
-                        )
-                        KeyValueRow(
-                            key = "Resultado",
-                            value = "${session.hostsAlive} vivos · ${session.portsFound} puertos · ${session.findingsCount} hallazgos",
-                            valueColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenSession(session.id) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = fmt.format(Date(session.startedAt)),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = session.target.take(28),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${session.hostsAlive} vivos · ${session.portsFound} puertos · ${session.findingsCount} hallazgos",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                Icons.Outlined.ChevronRight,
+                                contentDescription = "Ver detalle",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Toca un escaneo para ver el detalle y exportar el informe.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

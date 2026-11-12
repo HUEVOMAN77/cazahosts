@@ -48,6 +48,9 @@ object ScanRepository {
     private val _summary = MutableStateFlow<ScanSummary?>(null)
     val summary: StateFlow<ScanSummary?> = _summary
 
+    private val _paused = MutableStateFlow(false)
+    val paused: StateFlow<Boolean> = _paused
+
     private var engine: ScanEngine? = null
     private var job: Job? = null
     private var store: ResultStore? = null
@@ -83,6 +86,7 @@ object ScanRepository {
         }
         _hosts.value = emptyList()
         _summary.value = null
+        _paused.value = false
         _progress.value = ScanProgress(phase = "Iniciando", running = true)
         val e = ScanEngine(config)
         engine = e
@@ -128,9 +132,27 @@ object ScanRepository {
         engine?.cancel()
         job?.cancel()
         job = null
+        _paused.value = false
         _progress.value = _progress.value.copy(running = false, phase = "Cancelado")
         stopService()
     }
+
+    /** Detiene el avance del escaneo sin cancelar la sesion. */
+    fun pause() {
+        if (!isRunning) return
+        engine?.pause()
+        _paused.value = true
+        _progress.value = _progress.value.copy(phase = "Pausado")
+    }
+
+    fun resume() {
+        if (!isRunning) return
+        engine?.resume()
+        _paused.value = false
+        _progress.value = _progress.value.copy(phase = "Escaneando")
+    }
+
+    val isPaused: Boolean get() = _paused.value
 
     /**
      * El motor reporta el host al descubrirlo y otra vez al cerrar el resumen,

@@ -16,7 +16,9 @@ data class AppPrefs(
     val credRatePerSec: Int = 3,
     val credMaxPerHost: Int = 20,
     val checkIntervalSec: Int = 60,
-    val themeDark: Boolean = true
+    val themeDark: Boolean = true,
+    val lastTarget: String = "",
+    val udpChecks: Boolean = true
 )
 
 class AppSettings(context: Context) {
@@ -37,7 +39,9 @@ class AppSettings(context: Context) {
         credRatePerSec = prefs.getInt("cred_rate", 3),
         credMaxPerHost = prefs.getInt("cred_max_host", 20),
         checkIntervalSec = prefs.getInt("check_interval", 60),
-        themeDark = prefs.getBoolean("theme_dark", true)
+        themeDark = prefs.getBoolean("theme_dark", true),
+        lastTarget = prefs.getString("last_target", "") ?: "",
+        udpChecks = prefs.getBoolean("udp_checks", true)
     )
 
     private fun persist(state: AppPrefs) {
@@ -54,6 +58,8 @@ class AppSettings(context: Context) {
             putInt("cred_max_host", state.credMaxPerHost)
             putInt("check_interval", state.checkIntervalSec)
             putBoolean("theme_dark", state.themeDark)
+            putString("last_target", state.lastTarget)
+            putBoolean("udp_checks", state.udpChecks)
         }.apply()
         _state.value = state
     }

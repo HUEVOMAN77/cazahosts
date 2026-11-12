@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
@@ -32,7 +33,9 @@ import com.huevoman77.cazahosts.ui.screens.FindingsScreen
 import com.huevoman77.cazahosts.ui.screens.GeneratorsScreen
 import com.huevoman77.cazahosts.ui.screens.PanelScreen
 import com.huevoman77.cazahosts.ui.screens.ScannerScreen
+import com.huevoman77.cazahosts.ui.screens.SessionDetailScreen
 import com.huevoman77.cazahosts.ui.screens.SettingsScreen
+import com.huevoman77.cazahosts.ui.screens.SubdomainsScreen
 
 private data class Destination(
     val route: String,
@@ -43,6 +46,7 @@ private data class Destination(
 private val destinations = listOf(
     Destination("panel", "Panel", Icons.Outlined.Dashboard),
     Destination("scanner", "Escanear", Icons.Outlined.TravelExplore),
+    Destination("subdominios", "DNS", Icons.Outlined.Dns),
     Destination("hallazgos", "Riesgos", Icons.Outlined.Security),
     Destination("checker", "Checker", Icons.Outlined.Timeline),
     Destination("generadores", "Generar", Icons.Outlined.AutoAwesome),
@@ -93,17 +97,22 @@ fun CazaHostsNav(settings: AppSettings) {
                 PanelScreen(
                     settings = settings,
                     onOpenScanner = { navController.navigate("scanner") },
-                    onOpenFindings = { navController.navigate("hallazgos") }
+                    onOpenFindings = { navController.navigate("hallazgos") },
+                    onOpenSubdomains = { navController.navigate("subdominios") },
+                    onOpenSession = { id -> navController.navigate("sesion/$id") }
                 )
             }
             composable("scanner") {
                 ScannerScreen(settings = settings)
             }
+            composable("subdominios") {
+                SubdomainsScreen(onOpenScanner = { navController.navigate("scanner") })
+            }
             composable("hallazgos") {
                 FindingsScreen()
             }
             composable("checker") {
-                CheckerScreen()
+                CheckerScreen(settings = settings)
             }
             composable("generadores") {
                 GeneratorsScreen()
@@ -113,6 +122,10 @@ fun CazaHostsNav(settings: AppSettings) {
             }
             composable("ajustes") {
                 SettingsScreen(settings = settings, onBack = { navController.popBackStack() })
+            }
+            composable("sesion/{id}") { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                SessionDetailScreen(sessionId = id, onBack = { navController.popBackStack() })
             }
         }
     }
